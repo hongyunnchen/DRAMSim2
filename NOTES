@@ -1,0 +1,8 @@
+--> CommandQueue.bk is the original file. Replacing this with Baggys file. 
+
+--> The condition " if (currentClockCycle >=
+            bankStates[nextRankPRE][nextBankPRE].nextPrecharge)" 
+
+						holds the precharge till a refresh happens.
+
+--> Any modifications to the source code, save the original source code as <source_code_name>.orig.bk
