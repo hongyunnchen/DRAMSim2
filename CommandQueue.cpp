@@ -481,13 +481,22 @@ bool CommandQueue::pop(BusPacket **busPacket)
 				}
 				else 
 				{
-					nextRankAndBank(nextRank, nextBank); 
-					if (startingRank == nextRank && startingBank == nextBank)
-					{
-						break;
-					}
+     if (schedulingPolicy == BankThenRankRoundRobin || schedulingPolicy == RankThenBankRoundRobin) {
+					 nextRankAndBank(nextRank, nextBank);
+					 if (startingRank == nextRank && startingBank == nextBank)
+					 {
+					 	break;
+					 }
+     }
+     else {
+      // fifo scheduling policy
+      // scan the bank queues for the head with the earliest time-stamp
+      // return the bank and rank of that requesti
+      nextRankAndBank(nextRank, nextBank);
+      break;
+     }
 				}
-			}
+   }
 			while (true);
 
 			//if nothing was issuable, see if we can issue a PRE to an open bank
@@ -530,7 +539,10 @@ bool CommandQueue::pop(BusPacket **busPacket)
 						}
 					}
 					nextRankAndBank(nextRankPRE, nextBankPRE);
-				}
+				 if (schedulingPolicy == Fifo) {
+       break;
+     }
+    }
 				while (!(startingRank == nextRankPRE && startingBank == nextBankPRE));
 
 				//if no PREs could be sent, just return false
