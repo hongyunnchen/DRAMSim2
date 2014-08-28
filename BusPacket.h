@@ -65,10 +65,11 @@ public:
 	unsigned bank;
 	unsigned rank;
 	uint64_t physicalAddress;
-	void *data;
+	uint64_t timeStamp; // Time-stamp for FIFO arbitration scheme
+ void *data;
 	bool dependency; // necessary for the FIFO RW arbitration scheme
 	//Functions
-	BusPacket(BusPacketType packtype, uint64_t physicalAddr, unsigned col, unsigned rw, unsigned r, unsigned b, void *dat, ostream &dramsim_log_);
+	BusPacket(BusPacketType packtype, uint64_t physicalAddr, unsigned col, unsigned rw, unsigned r, unsigned b, void *dat, uint64_t ts, ostream &dramsim_log_);
 
 	void print();
 	void print(uint64_t currentClockCycle, bool dataStart);

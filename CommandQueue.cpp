@@ -27,6 +27,14 @@
 *  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *********************************************************************************/
+
+
+
+
+
+
+
+
 //CommandQueue.cpp
 //
 //Class file for command queue object
@@ -47,21 +55,19 @@ CommandQueue::CommandQueue(vector< vector<BankState> > &states, ostream &dramsim
 		nextRankPRE(0),
 		refreshRank(0),
 		refreshWaiting(false),
-		sendAct(true),
-		isCurrentQueueRead(true),
-		rwDependencyFound(false),
-		indexAddress(0),
-		isWriteDrained(false)
+		sendAct(true)
 {
 	//set here to avoid compile errors
 	currentClockCycle = 0;
 
 	//use numBankQueus below to create queue structure
 	size_t numBankQueues;
-	if (queuingStructure==PerRank) 	{
+	if (queuingStructure==PerRank)
+	{
 		numBankQueues = 1;
 	}
-	else if (queuingStructure==PerRankPerBank|| queuingStructure == Queue) {
+	else if (queuingStructure==PerRankPerBank)
+	{
 		numBankQueues = NUM_BANKS;
 	}
 	else
@@ -72,29 +78,11 @@ CommandQueue::CommandQueue(vector< vector<BankState> > &states, ostream &dramsim
 
 	//vector of counters used to ensure rows don't stay open too long
 	rowAccessCounters = vector< vector<unsigned> >(NUM_RANKS, vector<unsigned>(NUM_BANKS,0));
-	
-	// Allocate space for activeRowPerBank
-	
-	for (unsigned int i = 0; i<NUM_RANKS; i++) {
-		unsigned int *rowActivePerBank = new unsigned int[NUM_BANKS];
-		if (rankActiveBanksMap.find(i) == rankActiveBanksMap.end()) {
-			rankActiveBanksMap.insert(rankActiveBanksPairType(i, rowActivePerBank));			
-		}
-		else {
-		}
-	}
-		
+
 	//create queue based on the structure we want
 	BusPacket1D actualQueue;
 	BusPacket2D perBankQueue = BusPacket2D();
 	queues = BusPacket3D();
-	
-	fifo_queue = BusPacket1D();
-	frfcs_queue = BusPacket1D();	
-	
-	fifo_read_queue = BusPacket1D();
-	fifo_write_queue = BusPacket1D();
-
 	for (size_t rank=0; rank<NUM_RANKS; rank++)
 	{
 		//this loop will run only once for per-rank and NUM_BANKS times for per-rank-per-bank
@@ -104,8 +92,9 @@ CommandQueue::CommandQueue(vector< vector<BankState> > &states, ostream &dramsim
 			perBankQueue.push_back(actualQueue);
 		}
 		queues.push_back(perBankQueue);
-
 	}
+
+
 	//FOUR-bank activation window
 	//	this will count the number of activations within a given window
 	//	(decrementing counter)
@@ -118,195 +107,49 @@ CommandQueue::CommandQueue(vector< vector<BankState> > &states, ostream &dramsim
 		//init the empty vectors here so we don't seg fault later
 		tFAWCountdown.push_back(vector<unsigned>());
 	}
-	
 }
 CommandQueue::~CommandQueue()
 {
 	//ERROR("COMMAND QUEUE destructor");
 	size_t bankMax = NUM_RANKS;
-	if(queuingStructure == Queue) {
-		for (unsigned int i = 0; i <fifo_queue.size(); i++) {
-			delete fifo_queue.at(i);
-			delete frfcs_queue.at(i);
-		}
-		fifo_queue.clear();
-		frfcs_queue.clear();
-		fifo_read_queue.clear();
-		fifo_write_queue.clear();
+	if (queuingStructure == PerRank) {
+		bankMax = 1; 
 	}
-	else {
-		if (queuingStructure == PerRank) {
-			bankMax = 1; 
-		}
-		for (size_t r=0; r< NUM_RANKS; r++)
+	for (size_t r=0; r< NUM_RANKS; r++)
+	{
+		for (size_t b=0; b<bankMax; b++) 
 		{
-			for (size_t b=0; b<bankMax; b++) 
+			for (size_t i=0; i<queues[r][b].size(); i++)
 			{
-				for (size_t i=0; i<queues[r][b].size(); i++)
-				{
-					delete(queues[r][b][i]);
-				}
-				queues[r][b].clear();
+				delete(queues[r][b][i]);
 			}
+			queues[r][b].clear();
 		}
 	}
 }
-
-void CommandQueue::rearrangeFRFCS() {
-	cout<<"\n IN function rearrangeFRFCS";	
-	vector<BusPacket *> openBusPackets;
-	vector<BusPacket *> newBusPackets;
-	for (unsigned int i = 0; i<frfcs_queue.size(); i++) {
-		cout<<"\n BusPacket : ";
-		cout<<"\n PA : "<<hex<<frfcs_queue.at(i)->physicalAddress<<dec;
-		cout<<"\n Type : "<<frfcs_queue.at(i)->busPacketType;
-		if (rankActiveBanksMap.find(frfcs_queue.at(i)->rank) != rankActiveBanksMap.end()) {
-			rankActiveBanksMapType::iterator rankFound = rankActiveBanksMap.find(frfcs_queue.at(i)->rank);
-			unsigned int *rowActive = rankFound->second;
-			if(frfcs_queue.at(i)->row == rowActive[frfcs_queue.at(i)->bank]) { // same as opened row
-				openBusPackets.push_back(frfcs_queue.at(i));
-			}
-			else {
-				newBusPackets.push_back(frfcs_queue.at(i));
-			}
-		}
-		else {
-			ERROR("\n Bus Packet has rank more than number of ranks present in the memory system");
-		}
-	}
-	
-
-	frfcs_queue.clear();
-	for (unsigned int i = 0; i<openBusPackets.size(); i++) {
-		frfcs_queue.push_back(openBusPackets.at(i));
-	}
-	for (unsigned int i = 0; i<newBusPackets.size(); i++) {
-		frfcs_queue.push_back(newBusPackets.at(i));
-	}
-
-	/*
-	vector <BusPacket*> diffVector;
-	vector <BusPacket*> sameVector;
-			
-	unsigned int headBank = frfcs_queue[0]->bank;
-	unsigned int headRow = frfcs_queue[0]->row;
-	unsigned int index;
-	
-	for (unsigned int i = 0; i<frfcs_queue.size(); i++) {
-		BusPacket *compare = frfcs_queue.at(i);
-		if(compare->bank != headBank || compare->row != headRow) {
-			diffVector.push_back(compare);
-		}
-		else {
-			sameVector.push_back(compare);
-		}
-	}
-	unsigned int i;
-	for (i = 0; i<sameVector.size(); i++) {
-		frfcs_queue.at(i) = sameVector.at(i);
-	}
-	index = i;
-	for (i = 0; i<diffVector.size(); i++) {
-		frfcs_queue.at(index+i) = diffVector.at(i);
-	}
-
-	*/
-
-}
-
 //Adds a command to appropriate queue
 void CommandQueue::enqueue(BusPacket *newBusPacket)
 {
 	unsigned rank = newBusPacket->rank;
 	unsigned bank = newBusPacket->bank;
-	
-	static BusPacket *tmpBusPacket = NULL; // Buffer activate buspacket to determine next packet is read or write
-
 	if (queuingStructure==PerRank)
 	{
 		queues[rank][0].push_back(newBusPacket);
 		if (queues[rank][0].size()>CMD_QUEUE_DEPTH)
 		{
 			ERROR("== Error - Enqueued more than allowed in command queue");
-			ERROR("Need to call .hasRoomFor(int numberToEnqueue, unsigned rank, unsigned bank) first");
+			ERROR("						Need to call .hasRoomFor(int numberToEnqueue, unsigned rank, unsigned bank) first");
 			exit(0);
 		}
 	}
 	else if (queuingStructure==PerRankPerBank)
 	{
 		queues[rank][bank].push_back(newBusPacket);
-
 		if (queues[rank][bank].size()>CMD_QUEUE_DEPTH)
 		{
 			ERROR("== Error - Enqueued more than allowed in command queue");
 			ERROR("						Need to call .hasRoomFor(int numberToEnqueue, unsigned rank, unsigned bank) first");
 			exit(0);
-		}
-	}
-	else if (queuingStructure == Queue) {
-		if(schedulingPolicy == fifo){
-			fifo_queue.push_back(newBusPacket);	
-			if (fifo_queue.size() > CMD_QUEUE_DEPTH) {
-				ERROR("== Error - Enqueued more than allowed in command queue");
-				ERROR("Need to call .hasRoomFor(int numberToEnqueue, unsigned rank, unsigned bank) first");
-				exit(0);
-			}
-		}
-		else if (schedulingPolicy == fiforw) {
-			cout<<"\n Enqueuing new bus packet : \n";
-			newBusPacket->print();
-			if (newBusPacket->busPacketType == ACTIVATE) {
-				tmpBusPacket = newBusPacket;
-				cout<<"\n setting buspacket";
-
-			}
-			else if (newBusPacket->busPacketType == READ || newBusPacket->busPacketType == READ_P) {
-				if (tmpBusPacket) {
-					if(fifo_read_queue.size() > CMD_QUEUE_DEPTH) {
-						ERROR("== Error - Enqueued more than allowed in command queue");
-						ERROR("						Need to call .hasRoomFor(int numberToEnqueue, unsigned rank, unsigned bank) first");
-						exit(0);										
-					}
-					fifo_read_queue.push_back(tmpBusPacket);
-					fifo_read_queue.push_back(newBusPacket);
-					cout<<"\n FIFO READ SIZE : " <<fifo_read_queue.size();	
-					uint64_t address = newBusPacket->physicalAddress;
-					for (unsigned int i = 0; i<fifo_write_queue.size(); i++) {
-						if (address == fifo_write_queue.at(i)->physicalAddress) {
-							newBusPacket->dependency = true;
-							fifo_write_queue.at(i)->dependency = true;
-							rwDependencyFound = true;
-							break;
-						}
-					}
-				}
-			}
-			else if (newBusPacket->busPacketType == WRITE || newBusPacket->busPacketType == WRITE_P) {
-				if (tmpBusPacket) {
-					if (fifo_write_queue.size() > CMD_QUEUE_DEPTH) {
-						ERROR("== Error - Enqueued more than allowed in command queue");
-						ERROR("						Need to call .hasRoomFor(int numberToEnqueue, unsigned rank, unsigned bank) first");
-						exit(0);
-					}
-					fifo_write_queue.push_back(tmpBusPacket);
-					fifo_write_queue.push_back(newBusPacket);	
-					cout<<"\n FIFO WRITE SIZE : " <<fifo_write_queue.size();	
-				}
-			}
-			else {
-				ERROR("== ERROR - What buspacket is this .... ?");
-				cout<<" " <<newBusPacket->busPacketType;
-				exit(0);
-			}
-		}
-		else if (schedulingPolicy == frfcs) {
-			if(frfcs_queue.size() <= 2) {
-				frfcs_queue.push_back(newBusPacket);
-			}
-			else {
-				frfcs_queue.push_back(newBusPacket);	
-				rearrangeFRFCS();	
-			}
 		}
 	}
 	else
@@ -350,22 +193,15 @@ bool CommandQueue::pop(BusPacket **busPacket)
 
 	if (rowBufferPolicy==ClosePage)
 	{
-		// Check active rows
-		updateActiveRowPerBank();
-		
-
-		// no refresh is happening i belive: ANI			
 		bool sendingREF = false;
 		//if the memory controller set the flags signaling that we need to issue a refresh
 		if (refreshWaiting)
 		{
-			//cout<<"\n REFRESH WAITING SET";
 			bool foundActiveOrTooEarly = false;
 			//look for an open bank
 			for (size_t b=0;b<NUM_BANKS;b++)
 			{
 				vector<BusPacket *> &queue = getCommandQueue(refreshRank,b);
-
 				//checks to make sure that all banks are idle
 				if (bankStates[refreshRank][b].currentBankState == RowActive)
 				{
@@ -376,22 +212,18 @@ bool CommandQueue::pop(BusPacket **busPacket)
 					{
 						BusPacket *packet = queue[j];
 						if (packet->row == bankStates[refreshRank][b].openRowAddress &&
-								packet->bank == b && packet->rank == refreshRank)
+								packet->bank == b)
 						{
-						//	cout<<"\nCHECKING WHETHER TO ISSUE REFRESH";
 							if (packet->busPacketType != ACTIVATE && isIssuable(packet))
 							{
-							//	cout<<"\nISSUING REFRESH";
 								*busPacket = packet;
-								if (packet->dependency == true) {
-									rwDependencyFound = false;
-								}
 								queue.erase(queue.begin() + j);
 								sendingREF = true;
 							}
 							break;
 						}
 					}
+
 					break;
 				}
 				//	NOTE: checks nextActivate time for each bank to make sure tRP is being
@@ -409,7 +241,7 @@ bool CommandQueue::pop(BusPacket **busPacket)
 			//	reset flags and rank pointer
 			if (!foundActiveOrTooEarly && bankStates[refreshRank][0].currentBankState != PowerDown)
 			{
-				*busPacket = new BusPacket(REFRESH, 0, 0, 0, refreshRank, 0, 0, dramsim_log);
+				*busPacket = new BusPacket(REFRESH, 0, 0, 0, refreshRank, 0, 0, currentClockCycle, dramsim_log);
 				refreshRank = -1;
 				refreshWaiting = false;
 				sendingREF = true;
@@ -420,325 +252,51 @@ bool CommandQueue::pop(BusPacket **busPacket)
 		if (!sendingREF)
 		{
 			bool foundIssuable = false;
-			unsigned startingRank;
-			unsigned startingBank;			
-			
-			if(schedulingPolicy == fifo) {
-
-				if(!fifo_queue.empty()) {
-					startingRank = fifo_queue.front()->rank;
-					startingBank = fifo_queue.front()->bank;
-				}
-				else {
-					startingRank = 0;
-					startingBank = 0;
-				}
-			}
-	//////////////////////////////////////////////////////
-			else if (schedulingPolicy == fiforw) {
-				if (isCurrentQueueRead) {
-					if (!fifo_read_queue.empty()){
-						startingRank = fifo_read_queue.front()->rank;
-						startingBank = fifo_read_queue.front()->bank;
-					}
-					else {
-						cout<<"\n I am here ...... read condition ";
-						startingRank = 0;
-						startingBank = 0;
-					}
-				}
-				else {
-					if(!fifo_write_queue.empty()) {
-						startingRank = fifo_write_queue.front()->rank;
-						startingBank = fifo_write_queue.front()->bank;
-					}
-					else {
-
-						cout<<"\n I am here ...... read condition ";
-						startingRank = 0;
-						startingBank = 0;
-					}
-				}
-			}
-	//////////////////////////////////////////////////////
-			else if (schedulingPolicy == frfcs) {
-				if(!frfcs_queue.empty()) {
-					startingRank = frfcs_queue.front()->rank;
-					startingBank = frfcs_queue.front()->bank;
-				}
-				else {
-					startingRank = 0; 
-					startingBank = 0;
-				}
-			}
-			else {
-				startingRank = nextRank;
-				startingBank = nextBank;
-			}
-
+			unsigned startingRank = nextRank;
+			unsigned startingBank = nextBank;
 			do
 			{
-			//	cout<<"\n IN HERE ALWAYS";
 				vector<BusPacket *> &queue = getCommandQueue(nextRank, nextBank);
-				//cout<<"\n QUEUE SIZE : "<<queue.size()<<" fifo " <<fifo_queue.size();
 				//make sure there is something in this queue first
 				//	also make sure a rank isn't waiting for a refresh
 				//	if a rank is waiting for a refesh, don't issue anything to it until the
 				//		refresh logic above has sent one out (ie, letting banks close)
-
+				if (!queue.empty() && !((nextRank == refreshRank) && refreshWaiting))
+				{
 					if (queuingStructure == PerRank)
-					{						
-							if (!queue.empty() && !((nextRank == refreshRank) && refreshWaiting)){
-							//search from beginning to find first issuable bus packet
-							for (size_t i=0;i<queue.size();i++)
-							{
-								if (isIssuable(queue[i]))
-								{
-								//check to make sure we aren't removing a read/write that is paired with an activate
-									if (i>0 && queue[i-1]->busPacketType==ACTIVATE &&
-											queue[i-1]->physicalAddress == queue[i]->physicalAddress)
-										continue;
-
-									*busPacket = queue[i];
-
-									queue.erase(queue.begin()+i);
-									foundIssuable = true;
-									break;
-								}
-							}
-						}
-					}
-					else if(queuingStructure == PerRankPerBank)
-					{	
-						if (!queue.empty() && !((nextRank == refreshRank) && refreshWaiting)){
-							if (isIssuable(queue[0]))
-							{
-								//no need to search because if the front can't be sent,
-								// then no chance something behind it can go instead
-								*busPacket = queue[0];
-								queue.erase(queue.begin());
-								foundIssuable = true;
-							}
-						}
-					}
-					else {							
-						if (!queue.empty() && !((queue[0]->rank == refreshRank) && refreshWaiting)){
-							for (size_t i=0;i<queue.size();i++)
-							{
-								if (isIssuable(queue[i]))
-								{
-								//check to make sure we aren't removing a read/write that is paired with an activate
-									if (i>0 && queue[i-1]->busPacketType==ACTIVATE &&
-											queue[i-1]->physicalAddress == queue[i]->physicalAddress)
-										continue;
-
-									*busPacket = queue[i];
-
-									queue.erase(queue.begin()+i);
-									foundIssuable = true;
-									break;
-								}
-							}
-							/*
-							if(isIssuable(queue[0])) {
-								*busPacket = queue[0];
-								if (queue[0]->dependency == true) {
-										rwDependencyFound = false;
-								}
-								queue.erase(queue.begin());
-								foundIssuable = true;
-							}
-							*/
-						}
-					}
-				
-				//if we found something, break out of do-while
-				if (foundIssuable) break;
-
-				//rank round robin
-				if (queuingStructure == PerRank)
-				{
-					nextRank = (nextRank + 1) % NUM_RANKS;
-					if (startingRank == nextRank)
 					{
-						break;
-					}
-				}
-				else if(queuingStructure == PerRankPerBank) 
-				{
-					nextRankAndBank(nextRank, nextBank);
-					if (startingRank == nextRank && startingBank == nextBank)
-					{
-						break;
-					}
-				}
-				else {
-					if(queue.size() != 0 && bankStates[queue.front()->rank][queue.front()->bank].nextActivate <= currentClockCycle) {
-						nextRank = queue.front()->rank;
-						nextBank = queue.front()->bank;
-						break;
-					}
-					else {
-						break;
-					}
-				}
-			}
-			while (true);
-
-			//if we couldn't find anything to send, return false
-			if (!foundIssuable) return false;
-		}
-	}
-	/*
-	else if (rowBufferPolicy == LookAheadClosePage) {
-
-		bool sendingREF = false;
-		//if the memory controller set the flags signaling that we need to issue a refresh
-		if (refreshWaiting)
-		{
-			//cout<<"\n REFRESH WAITING SET";
-			bool foundActiveOrTooEarly = false;
-			//look for an open bank
-			for (size_t b=0;b<NUM_BANKS;b++)
-			{
-				vector<BusPacket *> &queue = getCommandQueue(refreshRank,b);
-
-				//checks to make sure that all banks are idle
-				if (bankStates[refreshRank][b].currentBankState == RowActive)
-				{
-					foundActiveOrTooEarly = true;
-					//if the bank is open, make sure there is nothing else
-					// going there before we close it
-					for (size_t j=0;j<queue.size();j++)
-					{
-						BusPacket *packet = queue[j];
-						if (packet->row == bankStates[refreshRank][b].openRowAddress &&
-								packet->bank == b && packet->rank == refreshRank)
+						//search from beginning to find first issuable bus packet
+						for (size_t i=0;i<queue.size();i++)
 						{
-						//	cout<<"\nCHECKING WHETHER TO ISSUE REFRESH";
-							if (packet->busPacketType != ACTIVATE && isIssuable(packet))
+							if (isIssuable(queue[i]))
 							{
-							//	cout<<"\nISSUING REFRESH";
-								*busPacket = packet;
-								queue.erase(queue.begin() + j);
-								sendingREF = true;
-							}
-							break;
-						}
-					}
-					break;
-				}
-				//	NOTE: checks nextActivate time for each bank to make sure tRP is being
-				//				satisfied.	the next ACT and next REF can be issued at the same
-				//				point in the future, so just use nextActivate field instead of
-				//				creating a nextRefresh field
-				else if (bankStates[refreshRank][b].nextActivate > currentClockCycle)
-				{
-					foundActiveOrTooEarly = true;
-					break;
-				}
-			}
-
-			//if there are no open banks and timing has been met, send out the refresh
-			//	reset flags and rank pointer
-			if (!foundActiveOrTooEarly && bankStates[refreshRank][0].currentBankState != PowerDown)
-			{
-				*busPacket = new BusPacket(REFRESH, 0, 0, 0, refreshRank, 0, 0, dramsim_log);
-				refreshRank = -1;
-				refreshWaiting = false;
-				sendingREF = true;
-			}
-		} // refreshWaiting
-
-		//if we're not sending a REF, proceed as normal
-		if (!sendingREF)
-		{
-			bool foundIssuable = false;
-			unsigned startingRank;
-			unsigned startingBank;			
-			
-			if(schedulingPolicy == fifo) {
-
-				if(!fifo_queue.empty()) {
-					startingRank = fifo_queue.front()->rank;
-					startingBank = fifo_queue.front()->bank;
-				}
-				else {
-					startingRank = 0;
-					startingBank = 0;
-				}
-			}
-			else if (schedulingPolicy == frfcs) {
-				if(!frfcs_queue.empty()) {
-					startingRank = frfcs_queue.front()->rank;
-					startingBank = frfcs_queue.front()->bank;
-				}
-				else {
-					startingRank = 0; 
-					startingBank = 0;
-				}
-			}
-			else {
-				startingRank = nextRank;
-				startingBank = nextBank;
-			}
-
-			do
-			{
-			//	cout<<"\n IN HERE ALWAYS";
-				vector<BusPacket *> &queue = getCommandQueue(nextRank, nextBank);
-				//cout<<"\n QUEUE SIZE : "<<queue.size()<<" fifo " <<fifo_queue.size();
-				//make sure there is something in this queue first
-				//	also make sure a rank isn't waiting for a refresh
-				//	if a rank is waiting for a refesh, don't issue anything to it until the
-				//		refresh logic above has sent one out (ie, letting banks close)
-
-					if (queuingStructure == PerRank)
-					{						
-							if (!queue.empty() && !((nextRank == refreshRank) && refreshWaiting)){
-							//search from beginning to find first issuable bus packet
-							for (size_t i=0;i<queue.size();i++)
-							{
-								if (isIssuable(queue[i]))
-								{
 								//check to make sure we aren't removing a read/write that is paired with an activate
-									if (i>0 && queue[i-1]->busPacketType==ACTIVATE &&
-											queue[i-1]->physicalAddress == queue[i]->physicalAddress)
-										continue;
+								if (i>0 && queue[i-1]->busPacketType==ACTIVATE &&
+										queue[i-1]->physicalAddress == queue[i]->physicalAddress)
+									continue;
 
-									*busPacket = queue[i];
-									queue.erase(queue.begin()+i);
-									foundIssuable = true;
-									break;
-								}
+								*busPacket = queue[i];
+								queue.erase(queue.begin()+i);
+								foundIssuable = true;
+								break;
 							}
 						}
 					}
-					else if(queuingStructure == PerRankPerBank)
+					else
 					{
-						
-						if (!queue.empty() && !((nextRank == refreshRank) && refreshWaiting)){
-							if (isIssuable(queue[0]))
-							{
-								//no need to search because if the front can't be sent,
-								// then no chance something behind it can go instead
-								*busPacket = queue[0];
-								queue.erase(queue.begin());
-								foundIssuable = true;
-							}
+						if (isIssuable(queue[0]))
+						{
+
+							//no need to search because if the front can't be sent,
+							// then no chance something behind it can go instead
+							*busPacket = queue[0];
+							queue.erase(queue.begin());
+							foundIssuable = true;
 						}
 					}
-					else {							
-						if (!queue.empty() && !((queue[0]->rank == refreshRank) && refreshWaiting)){
-							//cout<<"\n DOING THIS";
-							if(isIssuable(queue[0])) {
-								*busPacket = queue[0];
-								queue.erase(queue.begin());
-								foundIssuable = true;
-							}
-						}
-					}
-				
+
+				}
+
 				//if we found something, break out of do-while
 				if (foundIssuable) break;
 
@@ -751,23 +309,22 @@ bool CommandQueue::pop(BusPacket **busPacket)
 						break;
 					}
 				}
-				else if(queuingStructure == PerRankPerBank) 
+				else 
 				{
-					nextRankAndBank(nextRank, nextBank);
-					if (startingRank == nextRank && startingBank == nextBank)
-					{
-						break;
-					}
-				}
-				else {
-					if(queue.size() != 0 && bankStates[queue.front()->rank][queue.front()->bank].nextActivate <= currentClockCycle) {
-						nextRank = queue.front()->rank;
-						nextBank = queue.front()->bank;
-						break;
-					}
-					else {
-						break;
-					}
+     if (schedulingPolicy == BankThenRankRoundRobin || schedulingPolicy == RankThenBankRoundRobin) {
+					 nextRankAndBank(nextRank, nextBank);
+					 if (startingRank == nextRank && startingBank == nextBank)
+					 {
+					 	break;
+					 }
+     }
+     else {
+      // fifo scheduling policy
+      // scan the bank queues for the head with the earliest time-stamp
+      // return the bank and rank of that requesti
+      nextRankAndBank(nextRank, nextBank);
+      break;
+     }
 				}
 			}
 			while (true);
@@ -776,12 +333,8 @@ bool CommandQueue::pop(BusPacket **busPacket)
 			if (!foundIssuable) return false;
 		}
 	}
-	*/
 	else if (rowBufferPolicy==OpenPage)
 	{
-		// call function to print state of banks;
-		dumpActiveRowPerBank();	
-		
 		bool sendingREForPRE = false;
 		if (refreshWaiting)
 		{
@@ -802,21 +355,17 @@ bool CommandQueue::pop(BusPacket **busPacket)
 						BusPacket *packet = refreshQueue[j];
 						//if a command in the queue is going to the same row . . .
 						if (bankStates[refreshRank][b].openRowAddress == packet->row &&
-								b == packet->bank && packet->rank == refreshRank)
+								b == packet->bank)
 						{
 							// . . . and is not an activate . . .
 							if (packet->busPacketType != ACTIVATE)
 							{
 								closeRow = false;
 								// . . . and can be issued . . .
-
 								if (isIssuable(packet))
 								{
 									//send it out
 									*busPacket = packet;
-									if (packet->dependency == true) {
-										rwDependencyFound = false;
-									}
 									refreshQueue.erase(refreshQueue.begin()+j);
 									sendingREForPRE = true;
 								}
@@ -834,7 +383,7 @@ bool CommandQueue::pop(BusPacket **busPacket)
 					if (closeRow && currentClockCycle >= bankStates[refreshRank][b].nextPrecharge)
 					{
 						rowAccessCounters[refreshRank][b]=0;
-						*busPacket = new BusPacket(PRECHARGE, 0, 0, 0, refreshRank, b, 0, dramsim_log);
+						*busPacket = new BusPacket(PRECHARGE, 0, 0, 0, refreshRank, b, 0, currentClockCycle, dramsim_log);
 						sendingREForPRE = true;
 					}
 					break;
@@ -853,7 +402,7 @@ bool CommandQueue::pop(BusPacket **busPacket)
 			//	reset flags and rank pointer
 			if (sendREF && bankStates[refreshRank][0].currentBankState != PowerDown)
 			{
-				*busPacket = new BusPacket(REFRESH, 0, 0, 0, refreshRank, 0, 0, dramsim_log);
+				*busPacket = new BusPacket(REFRESH, 0, 0, 0, refreshRank, 0, 0, currentClockCycle, dramsim_log);
 				refreshRank = -1;
 				refreshWaiting = false;
 				sendingREForPRE = true;
@@ -862,169 +411,62 @@ bool CommandQueue::pop(BusPacket **busPacket)
 
 		if (!sendingREForPRE)
 		{
-			unsigned startingRank;
-			unsigned startingBank;
-			if(schedulingPolicy == fifo ) {
-				if(!fifo_queue.empty()) {
-					startingRank = fifo_queue.front()->rank;
-					startingBank = fifo_queue.front()->bank;
-				}
-				else {
-					startingRank = 0;
-					startingBank = 0;
-				}
-			}
-			else if (schedulingPolicy == frfcs) {
-				if(!frfcs_queue.empty()) {
-					startingRank = frfcs_queue.front()->rank;
-					startingBank = frfcs_queue.front()->bank;
-				}
-				else {
-					startingRank = 0;
-					startingBank = 0;
-				}
-			}
-
-			else {
-				startingRank = nextRank;
-				startingBank = nextBank;
-			}
+			unsigned startingRank = nextRank;
+			unsigned startingBank = nextBank;
 			bool foundIssuable = false;
 			do // round robin over queues
 			{
 				vector<BusPacket *> &queue = getCommandQueue(nextRank,nextBank);
-				/*
-				cout<<"\n FIFO QUEUE ORDERED\n";
-				for (int i = 0; i<queue.size(); i++) {
-				cout<<"BANK : " <<queue.at(i)->bank<<" ROW : " <<queue.at(i)->row<<" BUS PACKET TYPE : " <<queue.at(i)->busPacketType<<endl;
-				}
-				*/
 				//make sure there is something there first
-				// this might create a problem for FIFO.... 
-				if(queuingStructure == PerRank || queuingStructure == PerRankPerBank) {
-					if (!queue.empty() && !((nextRank == refreshRank) && refreshWaiting))
+				if (!queue.empty() && !((nextRank == refreshRank) && refreshWaiting))
+				{
+					//search from the beginning to find first issuable bus packet
+					for (size_t i=0;i<queue.size();i++)
 					{
-						//search from the beginning to find first issuable bus packet
-						for (size_t i=0;i<queue.size();i++)
+						BusPacket *packet = queue[i];
+						if (isIssuable(packet))
 						{
-							BusPacket *packet = queue[i];
-							if (isIssuable(packet))
+							//check for dependencies
+							bool dependencyFound = false;
+							for (size_t j=0;j<i;j++)
 							{
-								//check for dependencies
-								bool dependencyFound = false;
-								
-								for (size_t j=0;j<i;j++)
+								BusPacket *prevPacket = queue[j];
+								if (prevPacket->busPacketType != ACTIVATE &&
+										prevPacket->bank == packet->bank &&
+										prevPacket->row == packet->row)
 								{
-									BusPacket *prevPacket = queue[j];
-									if (prevPacket->busPacketType != ACTIVATE &&
-											prevPacket->bank == packet->bank &&
-											prevPacket->row == packet->row)
-									{
-										
-										dependencyFound = true;
-										break;
-									}
+									dependencyFound = true;
+									break;
 								}
-
-								if (dependencyFound) continue;							
-								*busPacket = packet;
-								//cout<<"\n VALUE OF i : "<<i;	
-								//if the bus packet before is an activate, that is the act that was
-								//	paired with the column access we are removing, so we have to remove
-								//	that activate as well (check i>0 because if i==0 then theres nothing before it)
-								if (i>0 && queue[i-1]->busPacketType == ACTIVATE)
-								{
-									rowAccessCounters[(*busPacket)->rank][(*busPacket)->bank]++;
-									// i is being returned, but i-1 is being thrown away, so must delete it here 
-									delete (queue[i-1]);
-	
-									// remove both i-1 (the activate) and i (we've saved the pointer in *busPacket)
-
-									queue.erase(queue.begin()+i-1,queue.begin()+i+1);
-								}
-								else // there's no activate before this packet
-								{
-									//or just remove the one bus packet
-									
-									queue.erase(queue.begin()+i);
-								}
-
-								foundIssuable = true;
-								break;
 							}
-							
-							if(schedulingPolicy != fairfrfcs) {
-								break;
+							if (dependencyFound) continue;
+
+							*busPacket = packet;
+
+							//if the bus packet before is an activate, that is the act that was
+							//	paired with the column access we are removing, so we have to remove
+							//	that activate as well (check i>0 because if i==0 then theres nothing before it)
+							if (i>0 && queue[i-1]->busPacketType == ACTIVATE)
+							{
+								rowAccessCounters[(*busPacket)->rank][(*busPacket)->bank]++;
+								// i is being returned, but i-1 is being thrown away, so must delete it here 
+								delete (queue[i-1]);
+
+								// remove both i-1 (the activate) and i (we've saved the pointer in *busPacket)
+								queue.erase(queue.begin()+i-1,queue.begin()+i+1);
 							}
-							
+							else // there's no activate before this packet
+							{
+								//or just remove the one bus packet
+								queue.erase(queue.begin()+i);
+							}
+
+							foundIssuable = true;
+							break;
 						}
 					}
 				}
-				else if(queuingStructure == Queue) {
-					if (!queue.empty() && !((queue[0]->rank == refreshRank) && refreshWaiting))
-					{
-						//search from the beginning to find first issuable bus packet
-						for (size_t i=0;i<queue.size();i++)
-						{
-							BusPacket *packet = queue[i];
-	
-							if (isIssuable(packet) && packet->rank == nextRank && packet->bank == nextBank)
-							{
-								//check for dependencies
-								cout<<"\nISSUING PACKET : " <<packet->bank<<" "<<packet->busPacketType;
-								bool dependencyFound = false;
-								
-								for (size_t j=0;j<i;j++)
-								{
-									BusPacket *prevPacket = queue[j];
-									if (prevPacket->busPacketType != ACTIVATE &&
-											prevPacket->bank == packet->bank &&
-											prevPacket->row == packet->row &&
-											prevPacket->rank == packet->rank)
-									{
-										dependencyFound = true;
-										break;
-									}
-								}
-								
-								if (dependencyFound) continue;
-	
-								*busPacket = packet;
-	
-								//if the bus packet before is an activate, that is the act that was
-								//	paired with the column access we are removing, so we have to remove
-								//	that activate as well (check i>0 because if i==0 then theres nothing before it)
-								if (i>0 && queue[i-1]->busPacketType == ACTIVATE)
-								{
-									rowAccessCounters[(*busPacket)->rank][(*busPacket)->bank]++;
-									// i is being returned, but i-1 is being thrown away, so must delete it here 
-									if (queue[i-1]->dependency == true || queue[i]->dependency == true){
-										rwDependencyFound = false;
-									}
-									
-									delete (queue[i-1]);
-	
-									// remove both i-1 (the activate) and i (we've saved the pointer in *busPacket)
-									queue.erase(queue.begin()+i-1,queue.begin()+i+1);
-								}
-								else // there's no activate before this packet
-								{
-									//or just remove the one bus packet
-									if(queue[i]->dependency == true) {
-										rwDependencyFound = false;
-									}									
-									queue.erase(queue.begin()+i);
-								}
 
-								foundIssuable = true;
-								break;
-							}
-							else {
-								//break;
-							}
-						}
-					}
-				}
 				//if we found something, break out of do-while
 				if (foundIssuable) break;
 
@@ -1037,57 +479,12 @@ bool CommandQueue::pop(BusPacket **busPacket)
 						break;
 					}
 				}
-				else if(queuingStructure == PerRankPerBank) 
+				else 
 				{
 					nextRankAndBank(nextRank, nextBank); 
 					if (startingRank == nextRank && startingBank == nextBank)
 					{
 						break;
-					}
-				}
-				else if (schedulingPolicy == fifo) {
-					if(!fifo_queue.empty() && bankStates[queue.front()->rank][queue.front()->bank].nextActivate <= currentClockCycle) {
-						nextRank = fifo_queue.front()->rank;
-						nextBank = fifo_queue.front()->bank;
-						break;
-					}
-					else {
-						break;
-					}
-				}
-				else if (schedulingPolicy == frfcs) {
-					if(!frfcs_queue.empty() && bankStates[queue.front()->rank][queue.front()->bank].nextActivate <= currentClockCycle) {
-						nextRank = frfcs_queue.front()->rank;
-						nextBank = frfcs_queue.front()->bank;
-						break;
-					}
-					else {
-						break;
-					}
-				}
-
-				else if (schedulingPolicy == fiforw) {
-					if(isCurrentQueueRead) {
-						if(!fifo_read_queue.empty() && bankStates[queue.front()->rank][queue.front()->bank].nextActivate
-						<= currentClockCycle) {
-							nextRank = fifo_read_queue.front()->rank;
-							nextBank = fifo_read_queue.front()->bank;
-							break;
-						}
-						else {
-							break;
-						}
-					}
-					else {
-						if(!fifo_write_queue.empty() && bankStates[queue.front()->rank][queue.front()->bank].nextActivate
-						<= currentClockCycle) {
-							nextRank = fifo_write_queue.front()->rank;
-							nextBank = fifo_write_queue.front()->bank;
-							break;
-						}
-						else {
-							break;
-						}		
 					}
 				}
 			}
@@ -1101,75 +498,38 @@ bool CommandQueue::pop(BusPacket **busPacket)
 				bool sendingPRE = false;
 				unsigned startingRank = nextRankPRE;
 				unsigned startingBank = nextBankPRE;
-	
-		             //   bool found = true; // changed
 
 				do // round robin over all ranks and banks
 				{
-
-				//	cout<<"\n ALWAYS HERE";
-					
 					vector <BusPacket *> &queue = getCommandQueue(nextRankPRE, nextBankPRE);
-				//	cout<<"\nQUEUE SIZE : " <<queue.size();
-					bool found = true; // original
-					//check if bank is  open or if all banks have nothing
-					/*	
-					if (! (bankStates[nextRankPRE][nextBankPRE].currentBankState == RowActive) )
+					bool found = false;
+					//check if bank is open
+					if (bankStates[nextRankPRE][nextBankPRE].currentBankState == RowActive)
 					{
-						
 						for (size_t i=0;i<queue.size();i++)
 						{
-							//if there is something going to other banks  then we want to send a PRE							
-							if (((queue[i]->bank == nextBankPRE) && (queue[i]->rank == nextRankPRE))||
-									(queue[i]->row == bankStates[nextRankPRE][nextBankPRE].openRowAddress))
+							//if there is something going to that bank and row, then we don't want to send a PRE
+							if (queue[i]->bank == nextBankPRE &&
+									queue[i]->row == bankStates[nextRankPRE][nextBankPRE].openRowAddress)
 							{
-								found = false;
+								found = true;
 								break;
 							}
 						}
 
-					}
-					
-         	else {
-        		for (size_t i=0;i<queue.size();i++) {
-            //if there is something going to same rank and  banks but different row  then we want to send a PRE
-            	if (queue[i]->row != 
-							bankStates[nextRankPRE][nextBankPRE].openRowAddress  && queue[i]->bank == nextBankPRE && queue[i]->rank == nextRankPRE) {
-              	found = false;
-                break;
-             	}
-            }
-          }
-					*/
-					if(bankStates[nextRankPRE][nextBankPRE].currentBankState == RowActive) {
-						for (size_t i = 0; i<queue.size(); i++) {
-							if(queue[0]->bank == nextBankPRE && queue[0]->rank == nextRankPRE && queue[0]->row != bankStates[nextRankPRE][nextBankPRE].openRowAddress) {
-								found = false;
+						//if nothing found going to that bank and row or too many accesses have happend, close it
+						if (!found || rowAccessCounters[nextRankPRE][nextBankPRE]==TOTAL_ROW_ACCESSES)
+						{
+							if (currentClockCycle >= bankStates[nextRankPRE][nextBankPRE].nextPrecharge)
+							{
+								sendingPRE = true;
+								rowAccessCounters[nextRankPRE][nextBankPRE] = 0;
+								*busPacket = new BusPacket(PRECHARGE, 0, 0, 0, nextRankPRE, nextBankPRE, 0, currentClockCycle, dramsim_log);
 								break;
 							}
 						}
 					}
-					//if nothing found going to that bank and row or too many accesses have happend, close it
-					//BAGGY-CHANGED
-          if ( (bankStates[nextRankPRE][nextBankPRE].currentBankState == RowActive) &&  ( !found )) { //
-       	//if (rowAccessCounters[nextRankPRE][nextBankPRE]==TOTAL_ROW_ACCESSES) // changed
-						
-						if (currentClockCycle >= 
-						bankStates[nextRankPRE][nextBankPRE].nextPrecharge) { // changed 
-          	//	cout<<"Baggy powup "<<bankStates[nextRankPRE][nextBankPRE].nextPowerUp<<" clock  "<<currentClockCycle<<endl;
-							sendingPRE = true;
-							rowAccessCounters[nextRankPRE][nextBankPRE] = 0;
-							*busPacket = new BusPacket(PRECHARGE, 0, 0, 0, nextRankPRE, nextBankPRE, 0, dramsim_log);
-							break;
-					 	}
-					}
-
-					// need to put condition here......
-					
-					nextRankAndBankPRE(nextRankPRE, nextBankPRE);
-					//if(schedulingPolicy == fifo || schedulingPolicy == frfcs) {
-					//	break;	
-					//}
+					nextRankAndBank(nextRankPRE, nextBankPRE);
 				}
 				while (!(startingRank == nextRankPRE && startingBank == nextBankPRE));
 
@@ -1261,46 +621,6 @@ vector<BusPacket *> &CommandQueue::getCommandQueue(unsigned rank, unsigned bank)
 	{
 		return queues[rank][0];
 	}
-	else if(queuingStructure == Queue) {
-		if(schedulingPolicy == fifo) {
-			return fifo_queue;
-		}
-		
-		else if(schedulingPolicy == frfcs) {			
-			return frfcs_queue;
-		}
-
-		else if (schedulingPolicy == fiforw) {
-			cout<<"\n Conditions : \n";
-			cout<<"rwDependencyFound : " <<rwDependencyFound<<"\n";
-			cout<<"fifo_write_queue.size() : " <<fifo_write_queue.size()<<"\n";
-			cout<<"isWriteDrained : " <<isWriteDrained<<"\n";
-			cout<<"fifo_read_queue.size() : " <<fifo_read_queue.size()<<"\n";
-			cout<<"fifo_write_queue.size() : " <<fifo_write_queue.size()<<"\n";
-			if (rwDependencyFound || fifo_write_queue.size() > THRESH_HIGH || isWriteDrained || 
-			fifo_read_queue.size() == 0 || fifo_write_queue.size() % 2 == 1) {
-				isCurrentQueueRead = false;
-				if(fifo_write_queue.size() == THRESH_LOW) {
-					isWriteDrained = false;
-				}
-				cout<<"\n Returning write queue";
-				return fifo_write_queue;
-			}
-			else {
-				isCurrentQueueRead = true;
-				cout<<"\n Returning read queue";	
-				return fifo_read_queue;
-			}
-
-		}
-		
-		else {
-			cout<<"\n WRONG SCHEDULING POLICY WITH QUEUE DATA STRUCTURE";
-			abort();
-		}	
-	}
-		
-
 	else
 	{
 		ERROR("Unknown queue structure");
@@ -1327,21 +647,6 @@ bool CommandQueue::isIssuable(BusPacket *busPacket)
 		}
 		else
 		{
-		/*	
-		if (bankStates[busPacket->rank][busPacket->bank].currentBankState == Idle ||
-		        bankStates[busPacket->rank][busPacket->bank].currentBankState == Refreshing){
-						cout<<"\n First condition true";
-
-						}
-						cout<<"\n Current clock cycle : " <<currentClockCycle<<" " <<" next activate : " <<bankStates[busPacket->rank][busPacket->bank].nextActivate<<" bank : "<<busPacket->bank<<" " <<busPacket->rank;
-		        if(currentClockCycle >= bankStates[busPacket->rank][busPacket->bank].nextActivate) {
-							cout<<"\n Second condition true";
-						}
-						
-		        if(tFAWCountdown[busPacket->rank].size() < 4){
-							cout <<"\n Third condition true";
-						}
-			*/			
 			return false;
 		}
 		break;
@@ -1384,7 +689,6 @@ bool CommandQueue::isIssuable(BusPacket *busPacket)
 			return false;
 		}
 		break;
-
 	default:
 		ERROR("== Error - Trying to issue a crazy bus packet type : ");
 		busPacket->print();
@@ -1408,9 +712,6 @@ bool CommandQueue::isEmpty(unsigned rank)
 		}
 		return true;
 	}
-	else if (queuingStructure == Queue) {
-		return fifo_queue.empty();
-	}
 	else
 	{
 		DEBUG("Invalid Queueing Stucture");
@@ -1425,53 +726,21 @@ void CommandQueue::needRefresh(unsigned rank)
 	refreshRank = rank;
 }
 
-void CommandQueue::nextRankAndBankPRE(unsigned &rank, unsigned &bank)
-{
-	if (schedulingPolicy == RankThenBankRoundRobin)
-	{
-		rank++;
-		if (rank == NUM_RANKS)
-		{
-			rank = 0;
-			bank++;
-			if (bank == NUM_BANKS)
-			{
-				bank = 0;
-			}
-		}
-	}
-	//bank-then-rank round robin
-	else if (schedulingPolicy == BankThenRankRoundRobin)
-	{
-		bank++;
-		if (bank == NUM_BANKS)
-		{
-			bank = 0;
-			rank++;
-			if (rank == NUM_RANKS)
-			{
-				rank = 0;
-			}
-		}
-	}
-	else if (schedulingPolicy == fifo || schedulingPolicy == frfcs || schedulingPolicy == fiforw) {
-		rank++;
-		if (rank == NUM_RANKS)
-		{
-			rank = 0;
-			bank++;
-			if (bank == NUM_BANKS)
-			{
-				bank = 0;
-			}
-		}
-	}
-	else
-	{
-								ERROR("== Error - Unknown scheduling policy");
-		exit(0);
-	}
-
+int CommandQueue::setMinTimeStamp(uint64_t& minTimeStamp, unsigned &rank, unsigned &bank){
+   for (int i = 0; i<NUM_RANKS; i++) {
+   
+     for (int j = 0; j<NUM_BANKS; j++) {
+     
+      if (queues[i][j].size() != 0) {
+      
+        minTimeStamp = queues[i][j].at(0)->timeStamp;
+        rank = i;
+        bank = j;
+        return 1;
+      } 
+     }
+   }
+ return 0;
 }
 
 
@@ -1504,124 +773,32 @@ void CommandQueue::nextRankAndBank(unsigned &rank, unsigned &bank)
 			}
 		}
 	}
-	else if (schedulingPolicy == fifo) {
-		if(fifo_queue.empty()) {
-			bank = 0;
-			rank = 0;
-		}
-		else {
-			rank = fifo_queue.front()->rank;
-			bank = fifo_queue.front()->bank;
-		}
-	}
-	else if (schedulingPolicy == fiforw) {
-		if (fifo_read_queue.empty() && fifo_write_queue.empty()) {
-			bank = 0;
-			rank = 0;
-		}
-		else if (isCurrentQueueRead) {
-			if (!fifo_read_queue.empty()){
-				rank = fifo_read_queue.front()->rank;
-				bank = fifo_read_queue.front()->bank;
-			}
-			else {
-				rank = 0;
-				bank = 0;
-			}
-		}
-		else {
-			if(!fifo_write_queue.empty()) {
-				rank = fifo_write_queue.front()->rank;
-				bank = fifo_write_queue.front()->bank;
-			}
-			else {
-				rank = 0;
-				bank = 0;
-			}
-		}
-	}
+ else if (schedulingPolicy == Fifo) {
+  // iterate over the ranks and bank queues and pick the queue with the earliest head
+   uint64_t minTimeStamp; // store the minimum time-stamp   
+   minTimeStamp = 0;
 
-	else if (schedulingPolicy == frfcs) {
-		if(frfcs_queue.empty()) {
-			bank = 0; 
-			rank = 0;
-		}
-		else {
-			rank = frfcs_queue.front()->rank;
-			bank = frfcs_queue.front()->bank;
-		}
-	}
+   setMinTimeStamp(minTimeStamp, rank, bank);
+   for (int i = 0; i<NUM_RANKS; i++) {
+    for (int j = 0; j<NUM_BANKS; j++) {     
+     if (queues[i][j].size() != 0) {
+      if (queues[i][j].at(0)->timeStamp < minTimeStamp) {
+        rank = i; 
+        bank = j;
+        minTimeStamp = queues[i][j].at(0)->timeStamp;
+      }
+     }     
+    }
+  }  
+ }
+
+ 
 	else
 	{
-								ERROR("== Error - Unknown scheduling policy");
+		ERROR("== Error - Unknown scheduling policy");
 		exit(0);
 	}
 
-}
-
-
-void CommandQueue::dumpActiveRowPerBank() {
-	unsigned int numBanks;
-	
-	if (queuingStructure==PerRank ) {
-		numBanks = 1;
-	}
-	else if (queuingStructure==PerRankPerBank|| queuingStructure == Queue) {
-		numBanks = NUM_BANKS;
-	}
-
-	for (unsigned int i = 0; i<NUM_RANKS; i++) {
-		for (unsigned int j = 0; j<numBanks; j++) {
-			cout<<"\n Current Bank State of rank : " <<i<<" bank : "<<j;
-			if (bankStates[i][j].currentBankState == 0) {
-				cout<<" IDLE ";
-			}
-			else if (bankStates[i][j].currentBankState == 1) {
-				cout<<" ROW ACTIVE";
-			}
-			else if (bankStates[i][j].currentBankState == 2) {
-				cout<<" PRECHARGING";
-			}
-			else if (bankStates[i][j].currentBankState == 3) {
-				cout<<" REFRESHING";
-			}
-			else if (bankStates[i][j].currentBankState == 4) {
-				cout<<" POWER DOWN";
-			}
-			else {
-				cout<<" UNKNOWN STATE";
-			}
-		}
-	}
-}
-
-void CommandQueue::updateActiveRowPerBank() {
-	unsigned int numBanks;
-	unsigned int *rowActive;
-
-	if(queuingStructure==PerRank) {
-		numBanks = 1;
-	}
-	else if (queuingStructure==PerRankPerBank || queuingStructure == Queue){
-		numBanks = NUM_BANKS;
-	}
-
-	rowActive = new unsigned int [numBanks];
-	for (unsigned int i = 0; i<NUM_RANKS; i++) {
-		for (unsigned int j = 0; j<numBanks; j++) {
-			if(bankStates[i][j].currentBankState == 1) { // row is active in this bank
-				if (rankActiveBanksMap.find(i) != rankActiveBanksMap.end()) {
-					rankActiveBanksMapType::iterator rankActiveFound = rankActiveBanksMap.find(i);
-					memcpy(rowActive, rankActiveFound->second, sizeof(unsigned int)*numBanks);	
-					rowActive[j] = bankStates[i][j].openRowAddress;
-					rankActiveBanksMap.erase(i);
-					rankActiveBanksMap.insert(rankActiveBanksPairType(i, rowActive));
-				}
-			}
-			else {
-			}
-		}
-	}
 }
 
 void CommandQueue::update()
@@ -1630,3 +807,4 @@ void CommandQueue::update()
 	//needed for SimulatorObject
 	//TODO: make CommandQueue not a SimulatorObject
 }
+

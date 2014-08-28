@@ -95,7 +95,7 @@ void addressMapping(uint64_t physicalAddress, unsigned &newTransactionChan, unsi
 	if (addressMappingScheme == Scheme1)
 	{
 
-		cout<<"\n SCHEME 1";
+		//cout<<"\n SCHEME 1 ";
 		//chan:rank:row:col:bank
 
 		tempA = physicalAddress;
@@ -128,7 +128,7 @@ void addressMapping(uint64_t physicalAddress, unsigned &newTransactionChan, unsi
 	// Wang address mapping scheme xors the L2 tag bits and the bank bits to extract a new bank ID. Good for improving bank concurrency. Excellent paper. 
 	// I am going to assume that the address mapping scheme is chn:rank:row:bank:col	
 	
-		cout<<"\n WANG ";
+		//cout<<"\n WANG ";
 		tempA = physicalAddress;
 		physicalAddress = physicalAddress >> colHighBitWidth;
 		tempB = physicalAddress << colHighBitWidth;
@@ -162,7 +162,7 @@ void addressMapping(uint64_t physicalAddress, unsigned &newTransactionChan, unsi
 	
 	else if (addressMappingScheme == Scheme2)
 	{
-		cout<<"\n SCHEME 2";
+		//cout<<"\n SCHEME 2";
 		//chan:row:col:bank:rank
 		tempA = physicalAddress;
 		physicalAddress = physicalAddress >> rankBitWidth;
@@ -352,8 +352,8 @@ void addressMapping(uint64_t physicalAddress, unsigned &newTransactionChan, unsi
 				<<" Col="<<newTransactionColumn<<"\n"); 
 
 	}
-		cout<<"Address : "<<hex<<physicalAddressCopy<<dec<<" Mapped Ch="<<newTransactionChan<<" Rank="<<newTransactionRank
-				<<" Bank="<<newTransactionBank<<" Row="<<newTransactionRow
-				<<" Col="<<newTransactionColumn<<"\n"; 
+		//cout<<"Address : "<<hex<<physicalAddressCopy<<dec<<" Mapped Ch="<<newTransactionChan<<" Rank="<<newTransactionRank
+				//<<" Bank="<<newTransactionBank<<" Row="<<newTransactionRow
+				//<<" Col="<<newTransactionColumn<<"\n"; 
 }
 };

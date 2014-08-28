@@ -113,7 +113,7 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 //get a bus packet from either data or cmd bus
 void MemoryController::receiveFromBus(BusPacket *bpacket)
 {
-	cout<<"\nRECEIVED BUS OF TYPE : " <<bpacket->busPacketType;
+
 	if (bpacket->busPacketType != DATA)
 	{
 		ERROR("== Error - Memory Controller received a non-DATA bus packet from rank");
@@ -151,7 +151,7 @@ void MemoryController::returnReadData(const Transaction *trans)
 	{
 		(*parentMemorySystem->ReturnReadData)(parentMemorySystem->systemID, trans->address, currentClockCycle);
 	}
-	cout<<"\n Read data returned by address : " <<trans->address<<" at time : " <<currentClockCycle<<endl;
+
 }
 
 //gives the memory controller a handle on the rank objects
@@ -210,7 +210,7 @@ void MemoryController::update()
 		{
 
 			(*ranks)[outgoingCmdPacket->rank]->receiveFromBus(outgoingCmdPacket);
-			cout<<"\n CMD BUS PACKET TYPE OF PACKET : " <<outgoingCmdPacket->busPacketType;
+   
 			outgoingCmdPacket = NULL;
 		}
 	}
@@ -303,7 +303,7 @@ void MemoryController::update()
 
 			writeDataToSend.push_back(new BusPacket(DATA, poppedBusPacket->physicalAddress, poppedBusPacket->column,
 			                                    poppedBusPacket->row, poppedBusPacket->rank, poppedBusPacket->bank,
-			                                    poppedBusPacket->data, dramsim_log));
+			                                    poppedBusPacket->data, currentClockCycle, dramsim_log));
 			writeDataCountdown.push_back(WL);
 		}
 
@@ -416,8 +416,8 @@ void MemoryController::update()
 						{
 							bankStates[i][j].nextWrite = max(currentClockCycle + max(BL/2, tCCD), bankStates[i][j].nextWrite);
 
-							cout<<"\n WRITE_TO_READ_DELAY_B : " <<WRITE_TO_READ_DELAY_B;
-							cout<<"\n Next read : " <<bankStates[i][j].nextRead;
+
+
 							bankStates[i][j].nextRead = max(currentClockCycle + WRITE_TO_READ_DELAY_B,
 									bankStates[i][j].nextRead);
 						}
@@ -516,7 +516,7 @@ void MemoryController::update()
 		//	assuming simple scheduling at the moment
 		//	will eventually add policies here
 		Transaction *transaction = transactionQueue[i];
-		cout<<"\nTransaction size : " <<transactionQueue.size();
+
 		//map address to rank,bank,row,col
 		unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
 
@@ -527,11 +527,11 @@ void MemoryController::update()
 		//and add them to the command queue
 		if (commandQueue.hasRoomFor(2, newTransactionRank, newTransactionBank))
 		{
-			cout<<"\nTransaction : " <<hex<<transaction->address<<dec<<" scheduled : " <<currentClockCycle<<endl;
+			//cout<<"\nTransaction : " <<hex<<transaction->address<<dec<<" scheduled : " <<currentClockCycle<<endl;
 			if (DEBUG_ADDR_MAP) 
 			{
 				PRINTN("== New Transaction - Mapping Address [0x" << hex << transaction->address << dec << "]"<<currentClockCycle);
-				cmd_verify_out<<"\nNew transaction : " <<hex<<transaction->address<<dec<<" Clock : " <<currentClockCycle<<"\n";
+				//cmd_verify_out<<"\nNew transaction : " <<hex<<transaction->address<<dec<<" Clock : " <<currentClockCycle<<"\n";
 				if (transaction->transactionType == DATA_READ) 
 				{
 					PRINT(" (Read)");
@@ -554,13 +554,13 @@ void MemoryController::update()
 			//create activate command to the row we just translated
 			BusPacket *ACTcommand = new BusPacket(ACTIVATE, transaction->address,
 					newTransactionColumn, newTransactionRow, newTransactionRank,
-					newTransactionBank, 0, dramsim_log);
+					newTransactionBank, 0, currentClockCycle, dramsim_log);
 
 			//create read or write command and enqueue it
 			BusPacketType bpType = transaction->getBusPacketType();
 			BusPacket *command = new BusPacket(bpType, transaction->address,
 					newTransactionColumn, newTransactionRow, newTransactionRank,
-					newTransactionBank, transaction->data, dramsim_log);
+					newTransactionBank, transaction->data, currentClockCycle, dramsim_log);
 
 
 
@@ -588,7 +588,7 @@ void MemoryController::update()
 		else // no room, do nothing this cycle
 		{
 			//PRINT( "== Warning - No room in command queue" << endl;
-			cout<<"\nTransaction : " <<hex<<transaction->address<<dec<<" is waiting :"<<currentClockCycle<<endl;
+			//cout<<"\nTransaction : " <<hex<<transaction->address<<dec<<" is waiting :"<<currentClockCycle<<endl;
 		}
 	}
 
@@ -705,9 +705,8 @@ void MemoryController::update()
 				addressMapping(returnTransaction[0]->address,chan,rank,bank,row,col);
 				insertHistogram(currentClockCycle-pendingReadTransactions[i]->timeAdded,rank,bank);
 				//return latency
-				
-				cout<<"\nTIME ADDED : " <<currentClockCycle-pendingReadTransactions[i]->timeAdded<<" "<<pendingReadTransactions[i]->timeAdded;
-				returnReadData(pendingReadTransactions[i]);
+					
+    returnReadData(pendingReadTransactions[i]);
 
 				delete pendingReadTransactions[i];
 				pendingReadTransactions.erase(pendingReadTransactions.begin()+i);

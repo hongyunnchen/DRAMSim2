@@ -608,7 +608,7 @@ void IniReader::InitEnumsFromStrings()
 		cout<<"\nSCHEDULING : BANK THEN RANK";
 	}
 	else if (SCHEDULING_POLICY == "FIFO") {
-		schedulingPolicy = fifo;
+		schedulingPolicy = Fifo;
 		if(DEBUG_INI_READER) {
 			DEBUG("SCHEDULING: FIFO");
 		}

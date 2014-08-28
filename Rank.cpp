@@ -82,8 +82,8 @@ Rank::~Rank()
 
 void Rank::receiveFromBus(BusPacket *packet)
 {
-	// ANIRUDH
-	cout<<"RANK : " <<this->id<<" RECEIVING ON BUS  : "<<endl;
+  
+	//cout<<"RANK : " <<this->id<<" RECEIVING ON BUS  : "<<endl;
 	//PRINTN(" -- R" << this->id << " Receiving On Bus    : ");
 	if (DEBUG_BUS)
 	{
@@ -120,7 +120,7 @@ void Rank::receiveFromBus(BusPacket *packet)
 #ifndef NO_STORAGE
 		banks[packet->bank].read(packet);
 #else
-	cout<<"\n IN HERE";
+
 	packet->busPacketType = DATA;
 #endif
 		readReturnPacket.push_back(packet);
@@ -287,7 +287,7 @@ void Rank::receiveFromBus(BusPacket *packet)
 #else
 		// end of the line for the write packet
 #endif
-		cout<<"\n DELETING THE PACKET";
+
 		delete(packet);
 		break;
 	default:
@@ -313,7 +313,7 @@ void Rank::update()
 		dataCyclesLeft--;
 		if (dataCyclesLeft == 0)
 		{
-			cout<<"\n ANI"<<RL;	
+
 			//if the packet is done on the bus, call receiveFromBus and free up the bus
 			memoryController->receiveFromBus(outgoingDataPacket);
 			outgoingDataPacket = NULL;			
@@ -334,7 +334,7 @@ void Rank::update()
 
 		outgoingDataPacket = readReturnPacket[0];
 		dataCyclesLeft = BL/2;
-		cout<<"\n DATA CYCLES LEFT : " <<dataCyclesLeft<<endl;
+
 		// remove the packet from the ranks
 		readReturnPacket.erase(readReturnPacket.begin());
 		readReturnCountdown.erase(readReturnCountdown.begin());

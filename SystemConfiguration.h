@@ -171,8 +171,9 @@ enum SchedulingPolicy
 {
 	RankThenBankRoundRobin,
 	BankThenRankRoundRobin,
-	fifo,
-	fiforw,
+	Fifo,
+	//// Need to edit/remove this
+ fiforw,
 	frfcs,
 	fairfrfcs
 };

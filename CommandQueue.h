@@ -80,7 +80,7 @@ public:
 	void update(); //SimulatorObject requirement
 	void rearrangeFRFCS();
 	void dumpActiveRowPerBank();
-	void updateActiveRowPerBank();
+
 	vector<BusPacket *> &getCommandQueue(unsigned rank, unsigned bank);
 
 	//fields
@@ -94,7 +94,9 @@ public:
 private:
 	void nextRankAndBank(unsigned &rank, unsigned &bank);
 	void nextRankAndBankPRE(unsigned &rank, unsigned &bank);
-	//fields
+	int setMinTimeStamp(uint64_t &timeStamp, unsigned &rank, unsigned &bank);
+ //fields
+ 
 	unsigned nextBank;
 	unsigned nextRank;
 

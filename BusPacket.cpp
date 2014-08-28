@@ -46,7 +46,7 @@ using namespace DRAMSim;
 using namespace std;
 
 BusPacket::BusPacket(BusPacketType packtype, uint64_t physicalAddr, 
-		unsigned col, unsigned rw, unsigned r, unsigned b, void *dat, 
+		unsigned col, unsigned rw, unsigned r, unsigned b, void *dat, uint64_t ts, 
 		ostream &dramsim_log_) :
 	dramsim_log(dramsim_log_),
 	busPacketType(packtype),
@@ -56,6 +56,7 @@ BusPacket::BusPacket(BusPacketType packtype, uint64_t physicalAddr,
 	rank(r),
 	physicalAddress(physicalAddr),
 	data(dat),
+ timeStamp(ts),
 	dependency(false)
 {}
 
@@ -72,30 +73,30 @@ void BusPacket::print(uint64_t currentClockCycle, bool dataStart)
 		{
 		case READ:
 			cmd_verify_out << "PA : " << hex<<physicalAddress<<dec<<" "<<currentClockCycle << ": read ("<<rank<<","<<bank<<","<<column<<",0);"<<endl;
-			cout << currentClockCycle << ": read ("<<rank<<","<<bank<<","<<column<<",0);"<<endl;
+			//cout << currentClockCycle << ": read ("<<rank<<","<<bank<<","<<column<<",0);"<<endl;
 			break;
 		case READ_P:
 			cmd_verify_out << "PA : " << hex<<physicalAddress<<dec<<" "<<currentClockCycle << ": read ("<<rank<<","<<bank<<","<<column<<",1);"<<endl;
-			cout << currentClockCycle << ": read ("<<rank<<","<<bank<<","<<column<<",1);"<<endl;
+			//cout << currentClockCycle << ": read ("<<rank<<","<<bank<<","<<column<<",1);"<<endl;
 			break;
 		case WRITE:
 			cmd_verify_out << "PA : " << hex<<physicalAddress<<dec<<" "<<currentClockCycle << ": write ("<<rank<<","<<bank<<","<<column<<",0 , 0, 'h0);"<<endl;
-			cout << currentClockCycle << ": write ("<<rank<<","<<bank<<","<<column<<",0 , 0, 'h0);"<<endl;
+			//cout << currentClockCycle << ": write ("<<rank<<","<<bank<<","<<column<<",0 , 0, 'h0);"<<endl;
 			break;
 		case WRITE_P:
 			cmd_verify_out << "PA : " << hex<<physicalAddress<<dec<<" "<<currentClockCycle << ": write ("<<rank<<","<<bank<<","<<column<<",1, 0, 'h0);"<<endl;
-			cout << currentClockCycle << ": write ("<<rank<<","<<bank<<","<<column<<",1, 0, 'h0);"<<endl;
+			//cout << currentClockCycle << ": write ("<<rank<<","<<bank<<","<<column<<",1, 0, 'h0);"<<endl;
 			break;
 		case ACTIVATE:
-			cout << "PA : " << physicalAddress<<" "<<currentClockCycle <<": activate (" << rank << "," << bank << "," << row <<");"<<endl;
+			//cout << "PA : " << hex<<physicalAddress<<dec<<" "<<currentClockCycle <<": activate (" << rank << "," << bank << "," << row <<");"<<endl;
 			cmd_verify_out << "PA : " << hex<<physicalAddress<<dec<<" "<<currentClockCycle <<": activate (" << rank << "," << bank << "," << row <<");"<<endl;
 			break;
 		case PRECHARGE:
-			cout << "PA : " << physicalAddress<<" "<<currentClockCycle <<": precharge (" << rank << "," << bank << "," << row <<");"<<endl;
+			//cout << "PA : " << physicalAddress<<" "<<currentClockCycle <<": precharge (" << rank << "," << bank << "," << row <<");"<<endl;
 			cmd_verify_out << currentClockCycle <<": precharge (" << rank << "," << bank << "," << row <<");"<<endl;
 			break;
 		case REFRESH:
-			cout << currentClockCycle <<": refresh (" << rank << ");"<<endl;
+			//cout << currentClockCycle <<": refresh (" << rank << ");"<<endl;
 			cmd_verify_out << currentClockCycle <<": refresh (" << rank << ");"<<endl;
 			break;
 		case DATA:
