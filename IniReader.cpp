@@ -616,30 +616,16 @@ void IniReader::InitEnumsFromStrings()
 	}
 
 	else if (SCHEDULING_POLICY == "FRFCFS") {
-		schedulingPolicy = frfcs;
+		schedulingPolicy = Frfcfs;
 		if(DEBUG_INI_READER) {
-			DEBUG("SCEDULING: FRFCS");
+			DEBUG("SCEDULING: FRFCFS");
 		}
-		cout<<"\nSCHEDULING : FRFCS";
+		cout<<"\nSCHEDULING : FRFCFS";
 	}
 	
-	else if (SCHEDULING_POLICY == "FIFORW") {
-		schedulingPolicy = fiforw;
-		if(DEBUG_INI_READER) {
-			DEBUG("SCHEDULING: FIFORW");
-		}
-		cout<<"\nSCHEDULING : FIFORW";
-	}
-	else if (SCHEDULING_POLICY == "FAIR-FRFCFS") {
-		schedulingPolicy = fairfrfcs;
-		if(DEBUG_INI_READER){
-			DEBUG("SCHEDULING: FAIR-FRFCFS");
-		}
-		cout<<"\nSCHEDULING : FAIR_FRFCFS";
-	}
 	else
 	{
-		cout << "WARNING: Unknown scheduling policy '"<<SCHEDULING_POLICY<<"'; valid options are 'rank_then_bank_round_robin' or 'bank_then_rank_round_robin' or 'FIFO' or 'FRFCS' or 'FIFORW' or 'FAIR-FRFCFS; defaulting to Bank Then Rank Round Robin" << endl;
+		cout << "WARNING: Unknown scheduling policy '"<<SCHEDULING_POLICY<<"'; valid options are 'rank_then_bank_round_robin' or 'bank_then_rank_round_robin' or 'FIFO' or 'FRFCS'; defaulting to Bank Then Rank Round Robin" << endl;
 		schedulingPolicy = BankThenRankRoundRobin;
 	}
 }

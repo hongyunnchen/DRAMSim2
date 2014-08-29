@@ -172,7 +172,8 @@ enum SchedulingPolicy
 	RankThenBankRoundRobin,
 	BankThenRankRoundRobin,
 	Fifo,
-	//// Need to edit/remove this
+	Frfcfs,
+ //// Need to edit/remove this
  fiforw,
 	frfcs,
 	fairfrfcs
