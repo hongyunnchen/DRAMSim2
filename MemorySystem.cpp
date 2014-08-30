@@ -165,7 +165,8 @@ MemorySystem::~MemorySystem()
 	if (VERIFICATION_OUTPUT)
 	{
 		cmd_verify_out.flush();
-		cmd_verify_out.close();
+		cmd_verify_out<<"\n###################################\n";
+  cmd_verify_out.close();
 	}
 }
 

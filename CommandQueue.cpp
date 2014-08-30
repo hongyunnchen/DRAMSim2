@@ -419,42 +419,46 @@ bool CommandQueue::pop(BusPacket ** busPacket)
             for (size_t i = 0; i < queue.size(); i++) {
               BusPacket *packet = queue[i];
               //check for dependencies
-              bool dependencyFound = false;
-              for (size_t j = 0; j < i; j++) {
-                BusPacket *prevPacket = queue[j];
-                if (prevPacket->busPacketType != ACTIVATE &&
-                    prevPacket->bank == packet->bank &&
-                    prevPacket->row == packet->row) {
-                  dependencyFound = true;
-                  break;
+              if (isIssuable(packet)) {
+                bool dependencyFound = false;
+                for (size_t j = 0; j < i; j++) {
+                  BusPacket *prevPacket = queue[j];
+                  if (prevPacket->busPacketType != ACTIVATE &&
+                      prevPacket->bank == packet->bank &&
+                      prevPacket->row == packet->row) {
+                    dependencyFound = true;
+                    break;
+                  }
                 }
+                if (dependencyFound)
+                  continue;
+
+                *busPacket = packet;
+
+                //if the bus packet before is an activate, that is the act that was
+                //      paired with the column access we are removing, so we have to remove
+                //      that activate as well (check i>0 because if i==0 then theres nothing before it)
+                if (i > 0 && queue[i - 1]->busPacketType == ACTIVATE) {
+                  rowAccessCounters[(*busPacket)->rank][(*busPacket)->bank]++;
+                  // i is being returned, but i-1 is being thrown away, so must delete it here 
+                  delete(queue[i - 1]);
+
+                  // remove both i-1 (the activate) and i (we've saved the pointer in *busPacket)
+                  queue.erase(queue.begin() + i - 1, queue.begin() + i + 1);
+                } else          // there's no activate before this packet
+                {
+                  //or just remove the one bus packet
+                  queue.erase(queue.begin() + i);
+                }
+
+                foundIssuable = true;
+                break;
               }
-              if (dependencyFound)
-                continue;
-
-              *busPacket = packet;
-
-              //if the bus packet before is an activate, that is the act that was
-              //      paired with the column access we are removing, so we have to remove
-              //      that activate as well (check i>0 because if i==0 then theres nothing before it)
-              if (i > 0 && queue[i - 1]->busPacketType == ACTIVATE) {
-                rowAccessCounters[(*busPacket)->rank][(*busPacket)->bank]++;
-                // i is being returned, but i-1 is being thrown away, so must delete it here 
-                delete(queue[i - 1]);
-
-                // remove both i-1 (the activate) and i (we've saved the pointer in *busPacket)
-                queue.erase(queue.begin() + i - 1, queue.begin() + i + 1);
-              } else            // there's no activate before this packet
-              {
-                //or just remove the one bus packet
-                queue.erase(queue.begin() + i);
-              }
-
-              foundIssuable = true;
-              break;
             }
-          } else if ((schedulingPolicy == BankThenRankRoundRobin || schedulingPolicy == Fifo)
-                     && queue.size() != 0) {
+          } else
+            if ((schedulingPolicy == BankThenRankRoundRobin
+                 || schedulingPolicy == Fifo)
+                && queue.size() != 0) {
             if (isIssuable(queue[0])) {
               // vanilla bankthenrankroundrobin looks at the head of the queue to dispatch buspackets
               //no need to search because if the front can't be sent,
@@ -477,7 +481,7 @@ bool CommandQueue::pop(BusPacket ** busPacket)
           }
         } else {
           if (schedulingPolicy == BankThenRankRoundRobin
-              || schedulingPolicy == RankThenBankRoundRobin) {
+              || schedulingPolicy == Frfcfs) {
             nextRankAndBank(nextRank, nextBank);
             if (startingRank == nextRank && startingBank == nextBank) {
               break;
@@ -490,7 +494,6 @@ bool CommandQueue::pop(BusPacket ** busPacket)
             break;
           }
         }
-
       }
       while (true);
 
@@ -504,20 +507,22 @@ bool CommandQueue::pop(BusPacket ** busPacket)
 
         do                      // round robin over all ranks and banks
         {
-          vector < BusPacket * >&queue = getCommandQueue(nextRankPRE, nextBankPRE);
+          vector < BusPacket * >&queue =
+            getCommandQueue(nextRankPRE, nextBankPRE);
           bool found = false;
           //check if bank is open
-          if (bankStates[nextRankPRE][nextBankPRE].currentBankState == RowActive) {
+          if (bankStates[nextRankPRE][nextBankPRE].currentBankState ==
+              RowActive) {
             if (schedulingPolicy == Frfcfs) {
-             for (size_t i = 0; i < queue.size(); i++) {
-               //if there is something going to that bank and row, then we don't want to send a PRE
-               if (queue[i]->bank == nextBankPRE &&
-                   queue[i]->row ==
-                   bankStates[nextRankPRE][nextBankPRE].openRowAddress) {
-                 found = true;
-                 break;
-               }
-             }
+              for (size_t i = 0; i < queue.size(); i++) {
+                //if there is something going to that bank and row, then we don't want to send a PRE
+                if (queue[i]->bank == nextBankPRE &&
+                    queue[i]->row ==
+                    bankStates[nextRankPRE][nextBankPRE].openRowAddress) {
+                  found = true;
+                  break;
+                }
+              }
             }
             //if nothing found going to that bank and row or too many accesses have happend, close it
             if (!found

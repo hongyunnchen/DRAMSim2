@@ -193,14 +193,6 @@ void MultiChannelMemorySystem::InitOutputFiles(string traceFilename)
 		verify_filename += ".tmp";
 		
 		cmd_verify_out.open(verify_filename.c_str());
-//		cmd_verify_out.open("aniboy.txt");
-		/*
-		if (!cmd_verify_out)
-		{
-			ERROR("Cannot open "<< verify_filename);
-			abort(); 
-		}
-		*/
 	}
 	// This sets up the vis file output along with the creating the result
 	// directory structure if it doesn't exist
