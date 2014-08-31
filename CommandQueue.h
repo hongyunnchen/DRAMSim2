@@ -61,27 +61,53 @@ public:
 	typedef vector<BusPacket *> BusPacket1D;
 	typedef vector<BusPacket1D> BusPacket2D;
 	typedef vector<BusPacket2D> BusPacket3D;
-	
+ 
+ // Dta structure to hold bank's last rw time-stamp 
+ typedef pair<unsigned int, uint64_t> bankLastRWTimeStampPairType;
+ typedef map<unsigned int, uint64_t> bankLastRWTimeStampMapType;
 
-	typedef pair <unsigned int, unsigned int*> rankActiveBanksPairType;
-	typedef map<unsigned int, unsigned int*> rankActiveBanksMapType;
+ // Data structure to hold rank-bank timestamp mapping
+ typedef pair<unsigned int, bankLastRWTimeStampMapType> rankBankTimeStampPairType;
+ typedef map<unsigned int, bankLastRWTimeStampMapType> rankBankTimeStampMapType;
 
+ // Data structure to hold bank's last accessed row
+ typedef pair<unsigned int, int> bankLastAccessedRowPairType;
+ typedef map<unsigned int, int> bankLastAccessedRowMapType;
+ 
+ // Data structure to hold rank-bank last accessed row
+ typedef pair<unsigned int, bankLastAccessedRowMapType> rankBankLastAccessedRowPairType;
+ typedef map<unsigned int, bankLastAccessedRowMapType> rankBankLastAccessedRowMapType;
+
+ // Data structure to hold last "actual" precharge to the bank
+ typedef pair<unsigned int, uint64_t> bankLastPrechargeTimeStampPairType;
+ typedef map<unsigned int, uint64_t> bankLastPrechargeTimeStampMapType;
+ 
+ // Data structure to hold rank-bank last "actual" precharge
+ typedef pair<unsigned int, bankLastPrechargeTimeStampMapType> rankBankLastPrechargeTimeStampPairType;
+ typedef map<unsigned int, bankLastPrechargeTimeStampMapType> rankBankLastPrechargeTimeStampMapType;
+
+ rankBankTimeStampMapType rankBankTimeStampMap;
+ rankBankLastAccessedRowMapType rankBankLastAccessedRowMap;
+ rankBankLastPrechargeTimeStampMapType rankBankLastPrechargeTimeStampMap; 
 	//functions
 	CommandQueue(vector< vector<BankState> > &states, ostream &dramsim_log);
 	virtual ~CommandQueue(); 
-
+ 
+ void adjustTimeOut();
 	void enqueue(BusPacket *newBusPacket);
 	bool pop(BusPacket **busPacket);
-	bool hasRoomFor(unsigned numberToEnqueue, unsigned rank, unsigned bank);
-	bool isIssuable(BusPacket *busPacket);
+	bool hasRoomFor(unsigned numberToEnqueue, unsigned rank, unsigned bank);	 
+ bool isIssuable(BusPacket *busPacket);
 	bool isEmpty(unsigned rank);
 	void needRefresh(unsigned rank);
 	void print();
 	void update(); //SimulatorObject requirement
 	void rearrangeFRFCS();
 	void dumpActiveRowPerBank();
-
-	vector<BusPacket *> &getCommandQueue(unsigned rank, unsigned bank);
+ void updateBankRWTimeStamp(unsigned rank, unsigned bank, unsigned currentClockCycle); 
+ void updateBankLastAccessedRow(unsigned rank, unsigned bank, int row);	
+ void updateBankLastPrecharge(unsigned rank, unsigned bank, unsigned currentClockCycle); 
+ vector<BusPacket *> &getCommandQueue(unsigned rank, unsigned bank);
 
 	//fields
 	BusPacket1D fifo_queue;	
@@ -110,13 +136,13 @@ private:
 	vector< vector<unsigned> > rowAccessCounters;
 
 	bool sendAct;
-	// For RW FIFO arbitration scheme
+	unsigned mistakeCounter;
+ 
+ // For RW FIFO arbitration scheme
 	bool isCurrentQueueRead;
 	bool rwDependencyFound;
 	uint64_t indexAddress;
-	bool isWriteDrained;
-	// For FRFCS arbitration scheme
-	rankActiveBanksMapType rankActiveBanksMap;
+	bool isWriteDrained; 
 };
 }
 

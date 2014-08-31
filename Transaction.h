@@ -75,7 +75,7 @@ public:
 			{
 				return READ_P;
 			}
-			else if (rowBufferPolicy == OpenPage)
+			else if (rowBufferPolicy == OpenPageTimeOut || rowBufferPolicy == OpenPageNumAccessesLimit || rowBufferPolicy == OpenPageInFlightRequests || rowBufferPolicy == AdaptiveOpenPage)
 			{
 				return READ; 
 			}
@@ -90,10 +90,11 @@ public:
 			{
 				return WRITE_P;
 			}
-			else if (rowBufferPolicy == OpenPage)
+			else if (rowBufferPolicy == OpenPageTimeOut || rowBufferPolicy == OpenPageNumAccessesLimit || rowBufferPolicy == OpenPageInFlightRequests || rowBufferPolicy == AdaptiveOpenPage)
 			{
 				return WRITE; 
 			}
+
 			else
 			{
 				ERROR("Unknown row buffer policy");

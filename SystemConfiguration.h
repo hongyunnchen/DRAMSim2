@@ -127,7 +127,9 @@ extern unsigned CMD_QUEUE_DEPTH;
 extern unsigned EPOCH_LENGTH;
 
 extern unsigned TOTAL_ROW_ACCESSES;
-
+extern unsigned TIME_LIMIT;
+extern unsigned HIGH_THRESHOLD;
+extern unsigned LOW_THRESHOLD;
 extern std::string ROW_BUFFER_POLICY;
 extern std::string SCHEDULING_POLICY;
 extern std::string ADDRESS_MAPPING_SCHEME;
@@ -155,8 +157,11 @@ enum AddressMappingScheme
 // used in MemoryController and CommandQueue
 enum RowBufferPolicy
 {
-	OpenPage,
-	ClosePage
+	OpenPageTimeOut,
+ OpenPageNumAccessesLimit,
+ OpenPageInFlightRequests,
+	AdaptiveOpenPage,
+ ClosePage
 };
 
 // Only used in CommandQueue

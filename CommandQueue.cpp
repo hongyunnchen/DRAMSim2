@@ -97,6 +97,26 @@ nextRankPRE(0), refreshRank(0), refreshWaiting(false), sendAct(true)
     //init the empty vectors here so we don't seg fault later
     tFAWCountdown.push_back(vector < unsigned >());
   }
+  
+  // update the map data structures for last accessed row and time-stamp
+  
+  for (int i = 0; i < NUM_RANKS; i++) {
+    bankLastRWTimeStampMapType bankLastRWTimeStampMap;
+    bankLastAccessedRowMapType bankLastAccessedRowMap; 
+    bankLastPrechargeTimeStampMapType bankLastPrechargeTimeStampMap;
+    for (int j = 0; j < NUM_BANKS; j++) {
+      // -1 denotes that no row has been accessed == idle bank
+      bankLastRWTimeStampMap.insert(bankLastRWTimeStampPairType(j, 0));
+      bankLastAccessedRowMap.insert(bankLastAccessedRowPairType(j, -1));
+      bankLastPrechargeTimeStampMap.insert(bankLastPrechargeTimeStampPairType(j, 0));
+    }
+    rankBankTimeStampMap.insert(rankBankTimeStampPairType
+                                (i, bankLastRWTimeStampMap));
+    rankBankLastAccessedRowMap.insert(rankBankLastAccessedRowPairType(i, bankLastAccessedRowMap));
+    rankBankLastPrechargeTimeStampMap.insert(rankBankLastPrechargeTimeStampPairType(i, bankLastPrechargeTimeStampMap));
+  }
+  // initial value of mistake counter
+  mistakeCounter = 2000;
 }
 
 CommandQueue::~CommandQueue()
@@ -143,48 +163,114 @@ void CommandQueue::enqueue(BusPacket * newBusPacket)
   }
 }
 
-/*
-void CommandQueue::updateBankActiveRow() {
-
-  for (int i = 0; i<NUM_RANKS; i++) {
-  
-    for (int j = 0; j<NUM_BANKS; j++) {
-      
-      if (bankStates[i][j].currentBankState == RowActive) {
-       // bank state has an active row
-       unsigned openRow = banksStates[i][j].openRowAddress;
-       vector<BusPacket*> tmpQueue;
-       for (int k = 0; k<queues[i][j].size(); k++) {
-         
-         if (queues[i][j].at(k)->row == openRow) {
-           // found a packet with an open-row           
-           tmpQueue.push_back(queues[i][j].at(k));
-           if (queues[i][j].at(k)->busPacketType == ACTIVATE) {
-             
-           }
-           else {
-           }           
-         }
-       }
-       if (tmpQueue.size() != 0) {
-        // Some open-row bus packets are detected
-        for (int k = 0; k<queues[i][j].size(); k++) {
-          if (queues[i][j].at(k) != tmpQueue.at(k)) {
-          
-          }
-
-
-
-        }
-       }
-      }
-    }
-  }  
-
-}
-*/
 //Removes the next item from the command queue based on the system's
 //command scheduling policy
+void CommandQueue::updateBankLastAccessedRow(unsigned rank, unsigned bank, int row) {
+  /*
+  //cout<<"\n Updating rank : " <<rank<<" bank : " <<bank<<" row :" <<row;
+  // For debug, displaying contents of rankBankLastAccessedRowMap
+  for (int i = 0; i < NUM_RANKS; i++) {
+    bankLastAccessedRowMapType bankLastAccessedRowMap = rankBankLastAccessedRowMap[i];
+    for (bankLastAccessedRowMapType::iterator it =
+         bankLastAccessedRowMap.begin(), eit = bankLastAccessedRowMap.end();
+         it != eit; it++) {
+
+      //cout << "\n RANK : " << i << " BANK : " << it->first << " ROW : "
+      //  << it->second;
+    }
+  }
+  // end debug
+  */
+  if (rankBankLastAccessedRowMap.find(rank) != rankBankLastAccessedRowMap.end()) {
+
+    rankBankLastAccessedRowMapType::iterator rankFound =
+      rankBankLastAccessedRowMap.find(rank);
+    bankLastAccessedRowMapType bankLastAccessedRowMap = rankFound->second;
+    bankLastAccessedRowMap[bank] = row;
+    rankBankLastAccessedRowMap.erase(rankFound);
+    rankBankLastAccessedRowMap.insert(rankBankLastAccessedRowPairType
+                                (rank, bankLastAccessedRowMap));
+  } else {
+    cout << "\n ERROR : Cannot find rank time-stamp";
+    exit(0);
+  } 
+}
+
+void CommandQueue::updateBankLastPrecharge(unsigned rank, unsigned bank, unsigned currentClockCycle) {
+  /*
+  // For debug, displaying contents of rankBankTimeStampMap
+  for (int i = 0; i < NUM_RANKS; i++) {
+    bankLastPrechargeTimeStampMapType bankLastPrechargeTimeStampMap = rankBankLastPrechargeTimeStampMap[i];
+    for (bankLastPrechargeTimeStampMapType::iterator it =
+         bankLastPrechargeTimeStampMap.begin(), eit = bankLastPrechargeTimeStampMap.end();
+         it != eit; it++) {
+
+      cout << "\n RANK : " << i << " BANK : " << it->first << " TIME STAMP : "
+        << it->second;
+    }
+  }
+  // end debug
+  */
+  if (rankBankLastPrechargeTimeStampMap.find(rank) != rankBankLastPrechargeTimeStampMap.end()) {
+
+    rankBankLastPrechargeTimeStampMapType::iterator rankFound =
+      rankBankLastPrechargeTimeStampMap.find(rank);
+    bankLastPrechargeTimeStampMapType bankLastPrechargeTimeStampMap = rankFound->second;
+    bankLastPrechargeTimeStampMap[bank] = currentClockCycle;
+    rankBankLastPrechargeTimeStampMap.erase(rankFound);
+    rankBankLastPrechargeTimeStampMap.insert(rankBankLastPrechargeTimeStampPairType
+                                (rank, bankLastPrechargeTimeStampMap));
+  } else {
+    cout << "\n ERROR : Cannot find rank time-stamp";
+    exit(0);
+  }
+
+
+}
+void CommandQueue::updateBankRWTimeStamp(unsigned rank, unsigned bank,
+                                         unsigned currentClockCycle)
+{
+  /*
+  // For debug, displaying contents of rankBankTimeStampMap
+  for (int i = 0; i < NUM_RANKS; i++) {
+    bankLastRWTimeStampMapType bankLastRWTimeStampMap = rankBankTimeStampMap[i];
+    for (bankLastRWTimeStampMapType::iterator it =
+         bankLastRWTimeStampMap.begin(), eit = bankLastRWTimeStampMap.end();
+         it != eit; it++) {
+
+      cout << "\n RANK : " << i << " BANK : " << it->first << " TIME STAMP : "
+        << it->second;
+    }
+  }
+  // end debug
+  */
+  if (rankBankTimeStampMap.find(rank) != rankBankTimeStampMap.end()) {
+
+    rankBankTimeStampMapType::iterator rankFound =
+      rankBankTimeStampMap.find(rank);
+    bankLastRWTimeStampMapType bankLastRWTimeStampMap = rankFound->second;
+    bankLastRWTimeStampMap[bank] = currentClockCycle;
+    rankBankTimeStampMap.erase(rankFound);
+    rankBankTimeStampMap.insert(rankBankTimeStampPairType
+                                (rank, bankLastRWTimeStampMap));
+  } else {
+    cout << "\n ERROR : Cannot find rank time-stamp";
+    exit(0);
+  }
+}
+
+void CommandQueue::adjustTimeOut() {
+  //cout<<"\n Mistake Counter : " <<mistakeCounter;
+  if (mistakeCounter > HIGH_THRESHOLD) {
+    ++TIME_LIMIT;
+    //cout<<"\n New Time out value : " <<TIME_LIMIT; 
+  }
+  else if (mistakeCounter < LOW_THRESHOLD) {
+    --TIME_LIMIT;
+    //cout<<"\n New Time out value : " <<TIME_LIMIT;
+  }
+}
+
 bool CommandQueue::pop(BusPacket ** busPacket)
 {
   //this can be done here because pop() is called every clock cycle by the parent MemoryController
@@ -257,9 +343,15 @@ bool CommandQueue::pop(BusPacket ** busPacket)
         *busPacket =
           new BusPacket(REFRESH, 0, 0, 0, refreshRank, 0, 0, currentClockCycle,
                         dramsim_log);
+        
+        for (int bankIter = 0; bankIter < NUM_BANKS; bankIter++) {
+          updateBankLastAccessedRow(refreshRank, bankIter, -1);
+        }
         refreshRank = -1;
         refreshWaiting = false;
         sendingREF = true;
+        // Update last accessed banks with idle status
+ 
       }
     }                           // refreshWaiting
 
@@ -334,7 +426,10 @@ bool CommandQueue::pop(BusPacket ** busPacket)
       if (!foundIssuable)
         return false;
     }
-  } else if (rowBufferPolicy == OpenPage) {
+  } else if (rowBufferPolicy == OpenPageTimeOut
+             || rowBufferPolicy == OpenPageNumAccessesLimit
+             || rowBufferPolicy == OpenPageInFlightRequests 
+             || rowBufferPolicy == AdaptiveOpenPage) {
     bool sendingREForPRE = false;
     if (refreshWaiting) {
       bool sendREF = true;
@@ -361,6 +456,10 @@ bool CommandQueue::pop(BusPacket ** busPacket)
                   *busPacket = packet;
                   refreshQueue.erase(refreshQueue.begin() + j);
                   sendingREForPRE = true;
+                  // update bank rw time-stamp data structure with the new time-stamp
+                  updateBankRWTimeStamp(packet->rank, packet->bank,
+                                        currentClockCycle);
+                  updateBankLastAccessedRow(packet->rank, packet->bank, packet->row);
                 }
                 break;
               } else            //command is an activate
@@ -372,6 +471,7 @@ bool CommandQueue::pop(BusPacket ** busPacket)
           }
 
           //if the bank is open and we are allowed to close it, then send a PRE
+          // ANI :Have a look in this code as weell
           if (closeRow
               && currentClockCycle >=
               bankStates[refreshRank][b].nextPrecharge) {
@@ -380,6 +480,8 @@ bool CommandQueue::pop(BusPacket ** busPacket)
               new BusPacket(PRECHARGE, 0, 0, 0, refreshRank, b, 0,
                             currentClockCycle, dramsim_log);
             sendingREForPRE = true;
+            updateBankLastPrecharge(refreshRank, b, currentClockCycle); 
+            updateBankLastAccessedRow(refreshRank, b, -1);
           }
           break;
         }
@@ -399,9 +501,13 @@ bool CommandQueue::pop(BusPacket ** busPacket)
         *busPacket =
           new BusPacket(REFRESH, 0, 0, 0, refreshRank, 0, 0, currentClockCycle,
                         dramsim_log);
+        for (int bankIter = 0; bankIter < NUM_BANKS; bankIter++) {        
+          updateBankLastAccessedRow(refreshRank, bankIter, -1);
+        }
         refreshRank = -1;
         refreshWaiting = false;
         sendingREForPRE = true;
+
       }
     }
 
@@ -420,6 +526,13 @@ bool CommandQueue::pop(BusPacket ** busPacket)
               BusPacket *packet = queue[i];
               //check for dependencies
               if (isIssuable(packet)) {
+                // Check if the packet is not activate
+                if (packet->busPacketType != ACTIVATE) {
+                  updateBankRWTimeStamp(packet->rank, packet->bank,
+                                        currentClockCycle);
+                  
+                  updateBankLastAccessedRow(packet->rank, packet->bank, packet->row);
+                }
                 bool dependencyFound = false;
                 for (size_t j = 0; j < i; j++) {
                   BusPacket *prevPacket = queue[j];
@@ -463,6 +576,12 @@ bool CommandQueue::pop(BusPacket ** busPacket)
               // vanilla bankthenrankroundrobin looks at the head of the queue to dispatch buspackets
               //no need to search because if the front can't be sent,
               // then no chance something behind it can go instead
+              if (queue[0]->busPacketType != ACTIVATE) {
+                updateBankRWTimeStamp(queue[0]->rank, queue[0]->bank,
+                                      currentClockCycle);
+              
+                updateBankLastAccessedRow(queue[0]->rank, queue[0]->bank, queue[0]->row);
+              }
               *busPacket = queue[0];
               queue.erase(queue.begin());
               foundIssuable = true;
@@ -509,11 +628,60 @@ bool CommandQueue::pop(BusPacket ** busPacket)
         {
           vector < BusPacket * >&queue =
             getCommandQueue(nextRankPRE, nextBankPRE);
-          bool found = false;
+
           //check if bank is open
-          if (bankStates[nextRankPRE][nextBankPRE].currentBankState ==
-              RowActive) {
-            if (schedulingPolicy == Frfcfs) {
+
+          //if nothing found going to that bank and row or too many accesses have happend, close it
+          // there are three flavors to open-page:
+          // 1. issue the PRE command after a number of row accesses
+          // 2. issue the PRE command after a time-limit
+          // 3. issue the PRE command if no commands are in flight
+          if (rowBufferPolicy == OpenPageTimeOut) {
+
+            bool found = true;
+            if (bankStates[nextRankPRE][nextBankPRE].currentBankState ==
+                RowActive) {
+              for (size_t i = 0; i < queue.size(); i++) {
+                // ANI : need to change this
+                //if there is something going to that bank but different row, then we do not want to starve it
+                if (queue[i]->bank == nextBankPRE &&
+                    queue[i]->row !=
+                    bankStates[nextRankPRE][nextBankPRE].openRowAddress) {
+                  found = false;
+                  break;
+                }
+              }
+
+
+              rankBankTimeStampMapType::iterator rankFound =
+                rankBankTimeStampMap.find(nextRankPRE);
+              bankLastRWTimeStampMapType bankLastRWTimeStampMap =
+                rankFound->second;
+              //cout << "\n TIME LIMIT : " << TIME_LIMIT;
+              //cout << "\n bank : " << nextBankPRE << " last access time : " <<
+               // bankLastRWTimeStampMap[nextBankPRE];
+
+
+              if (!found
+                  || currentClockCycle - bankLastRWTimeStampMap[nextBankPRE] >
+                  TIME_LIMIT) {
+                if (currentClockCycle >=
+                    bankStates[nextRankPRE][nextBankPRE].nextPrecharge) {
+                  sendingPRE = true;
+                  rowAccessCounters[nextRankPRE][nextBankPRE] = 0;
+                  *busPacket =
+                    new BusPacket(PRECHARGE, 0, 0, 0, nextRankPRE, nextBankPRE,
+                                  0, currentClockCycle, dramsim_log);
+                                    
+                  break;
+                }
+              }
+            }
+          } else if (rowBufferPolicy == OpenPageNumAccessesLimit) {
+             
+             bool found = false;
+             if (bankStates[nextRankPRE][nextBankPRE].currentBankState ==
+                RowActive) {
               for (size_t i = 0; i < queue.size(); i++) {
                 //if there is something going to that bank and row, then we don't want to send a PRE
                 if (queue[i]->bank == nextBankPRE &&
@@ -523,22 +691,94 @@ bool CommandQueue::pop(BusPacket ** busPacket)
                   break;
                 }
               }
+
+              if (!found
+                  || rowAccessCounters[nextRankPRE][nextBankPRE] ==
+                  TOTAL_ROW_ACCESSES) {
+                if (currentClockCycle >=
+                    bankStates[nextRankPRE][nextBankPRE].nextPrecharge) {
+                  sendingPRE = true;
+                  rowAccessCounters[nextRankPRE][nextBankPRE] = 0;
+                  *busPacket =
+                    new BusPacket(PRECHARGE, 0, 0, 0, nextRankPRE, nextBankPRE,
+                                  0, currentClockCycle, dramsim_log);
+                  break;
+                }
+              }
             }
-            //if nothing found going to that bank and row or too many accesses have happend, close it
-            if (!found
-                || rowAccessCounters[nextRankPRE][nextBankPRE] ==
-                TOTAL_ROW_ACCESSES) {
-              if (currentClockCycle >=
-                  bankStates[nextRankPRE][nextBankPRE].nextPrecharge) {
-                sendingPRE = true;
-                rowAccessCounters[nextRankPRE][nextBankPRE] = 0;
-                *busPacket =
-                  new BusPacket(PRECHARGE, 0, 0, 0, nextRankPRE, nextBankPRE, 0,
-                                currentClockCycle, dramsim_log);
-                break;
+          } else if (rowBufferPolicy == OpenPageInFlightRequests) {            
+            bool found = false;
+            if (bankStates[nextRankPRE][nextBankPRE].currentBankState ==
+                RowActive) {
+              for (size_t i = 0; i < queue.size(); i++) {
+                //if there is something going to that bank and row, then we don't want to send a PRE
+                if (queue[i]->bank == nextBankPRE &&
+                    queue[i]->row ==
+                    bankStates[nextRankPRE][nextBankPRE].openRowAddress) {
+                  found = true;
+                  break;
+                }
+              }
+
+              if (!found) {
+                if (currentClockCycle >=
+                    bankStates[nextRankPRE][nextBankPRE].nextPrecharge) {
+                  sendingPRE = true;
+                  rowAccessCounters[nextRankPRE][nextBankPRE] = 0;
+                  *busPacket =
+                    new BusPacket(PRECHARGE, 0, 0, 0, nextRankPRE, nextBankPRE,
+                                  0, currentClockCycle, dramsim_log);
+                  break;
+                }
               }
             }
           }
+          else if (rowBufferPolicy == AdaptiveOpenPage) {
+ 
+            bool found = true;
+            if (bankStates[nextRankPRE][nextBankPRE].currentBankState ==
+                RowActive) {
+              for (size_t i = 0; i < queue.size(); i++) {
+                // ANI : need to change this
+                //if there is something going to that bank but different row, then we do not want to starve it
+                if (queue[i]->bank == nextBankPRE &&
+                    queue[i]->row !=
+                    bankStates[nextRankPRE][nextBankPRE].openRowAddress) {
+                  found = false;
+                  break;
+                }
+              }
+
+
+              rankBankTimeStampMapType::iterator rankFound =
+                rankBankTimeStampMap.find(nextRankPRE);
+              bankLastRWTimeStampMapType bankLastRWTimeStampMap =
+                rankFound->second;
+              //cout << "\n TIME LIMIT : " << TIME_LIMIT;
+              //cout << "\n bank : " << nextBankPRE << " last access time : " <<
+              //  bankLastRWTimeStampMap[nextBankPRE];
+
+
+              if (!found
+                  || currentClockCycle - bankLastRWTimeStampMap[nextBankPRE] >
+                  TIME_LIMIT) {
+                if (currentClockCycle >=
+                    bankStates[nextRankPRE][nextBankPRE].nextPrecharge) {
+                  sendingPRE = true;
+                  rowAccessCounters[nextRankPRE][nextBankPRE] = 0;
+                  *busPacket =
+                    new BusPacket(PRECHARGE, 0, 0, 0, nextRankPRE, nextBankPRE,
+                                  0, currentClockCycle, dramsim_log);
+                  
+                  
+                  updateBankLastPrecharge(nextRankPRE, nextBankPRE, currentClockCycle); 
+                  updateBankLastAccessedRow(nextRankPRE, nextBankPRE, -1);
+                  break;
+                }
+              }
+            }           
+          }
+
           nextRankAndBank(nextRankPRE, nextBankPRE);
           if (schedulingPolicy == Fifo) {
             break;
@@ -566,6 +806,13 @@ bool CommandQueue::pop(BusPacket ** busPacket)
   //if its an activate, add a tfaw counter
   if ((*busPacket)->busPacketType == ACTIVATE) {
     tFAWCountdown[(*busPacket)->rank].push_back(tFAW);
+  }
+  
+  // Lets check the mistakeCounter every 100 cycles
+  if (rowBufferPolicy == AdaptiveOpenPage) {
+   if (currentClockCycle % 100 == 0) {
+     adjustTimeOut();
+   }
   }
 
   return true;
@@ -613,6 +860,7 @@ void CommandQueue::print()
  * don't always have a per bank queuing structure, sometimes the bank
  * argument is ignored (and the 0th index is returned 
  */
+
 vector < BusPacket * >&CommandQueue::getCommandQueue(unsigned rank,
                                                      unsigned bank)
 {
@@ -626,6 +874,8 @@ vector < BusPacket * >&CommandQueue::getCommandQueue(unsigned rank,
   }
 
 }
+
+
 
 //checks if busPacket is allowed to be issued
 bool CommandQueue::isIssuable(BusPacket * busPacket)
@@ -641,6 +891,24 @@ bool CommandQueue::isIssuable(BusPacket * busPacket)
           && currentClockCycle >=
           bankStates[busPacket->rank][busPacket->bank].nextActivate
           && tFAWCountdown[busPacket->rank].size() < 4) {
+                  
+
+          bankLastAccessedRowMapType bankLastAccessedRowMap = rankBankLastAccessedRowMap[busPacket->rank];
+          bankLastPrechargeTimeStampMapType bankLastPrechargeTimeStampMap = rankBankLastPrechargeTimeStampMap[busPacket->rank];
+
+          //cout<<"\n BusPacket TimeStamp : " <<busPacket->timeStamp<<" nextPrecharge : " <<bankStates[busPacket->rank][busPacket->bank].nextPrecharge<<" last precharge : " <<bankLastPrechargeTimeStampMap[busPacket->bank];
+          
+          if (bankLastAccessedRowMap[busPacket->bank] == busPacket->row) {
+            // The last accessed row of this bank matches the row of this bus packet; increase mistakeCounter
+            //cout<<"\n Last accessed row : " <<bankLastAccessedRowMap[busPacket->bank]<<" busPacket row : " <<busPacket->row;
+            mistakeCounter++;
+          }
+          if (bankLastPrechargeTimeStampMap[busPacket->bank] > bankStates[busPacket->rank][busPacket->bank].nextPrecharge) {
+            if(bankLastPrechargeTimeStampMap[busPacket->bank] - bankStates[busPacket->rank][busPacket->bank].nextPrecharge > tRP) {
+              // latest precharge was way far away from calculated precharge time-stamp
+              mistakeCounter--;
+            }
+          }        
         return true;
       } else {
         return false;
@@ -681,6 +949,18 @@ bool CommandQueue::isIssuable(BusPacket * busPacket)
           RowActive
           && currentClockCycle >=
           bankStates[busPacket->rank][busPacket->bank].nextPrecharge) {
+          
+
+          // check is necessary as both are unsigned and subtraction will lead to higher value 
+          if (busPacket->timeStamp > bankStates[busPacket->rank][busPacket->bank].nextPrecharge) {            
+
+           if (busPacket->timeStamp - bankStates[busPacket->rank][busPacket->bank].nextPrecharge > tRP) {
+             // Page miss could have been avoided if this was precharged sooner to make it idle by this time
+             //cout<<"\n BusPacket TimeStamp : " <<busPacket->timeStamp<<" nextPrecharge : " <<bankStates[busPacket->rank][busPacket->bank].nextPrecharge;
+             mistakeCounter--; 
+           } 
+          }
+        
         return true;
       } else {
         return false;

@@ -100,6 +100,13 @@ unsigned EPOCH_LENGTH;
 //row accesses allowed before closing (open page)
 unsigned TOTAL_ROW_ACCESSES;
 
+// time-limit for keeping bank open with row
+unsigned TIME_LIMIT;
+
+// Thresholds for adaptive open-page
+unsigned HIGH_THRESHOLD;
+unsigned LOW_THRESHOLD;
+
 // strings and their associated enums
 string ROW_BUFFER_POLICY;
 string SCHEDULING_POLICY;
@@ -184,6 +191,7 @@ static ConfigMap configMap[] =
 	DEFINE_BOOL_PARAM(USE_LOW_POWER,SYS_PARAM),
 
 	DEFINE_UINT_PARAM(TOTAL_ROW_ACCESSES,SYS_PARAM),
+ DEFINE_UINT_PARAM(TIME_LIMIT, SYS_PARAM),
 	DEFINE_STRING_PARAM(ROW_BUFFER_POLICY,SYS_PARAM),
 	DEFINE_STRING_PARAM(SCHEDULING_POLICY,SYS_PARAM),
 	DEFINE_STRING_PARAM(ADDRESS_MAPPING_SCHEME,SYS_PARAM),
@@ -533,14 +541,37 @@ void IniReader::InitEnumsFromStrings()
 		addressMappingScheme = Scheme1;
 	}
 
-	if (ROW_BUFFER_POLICY == "open_page")
+	if (ROW_BUFFER_POLICY == "open_page_time_out")
 	{
-		rowBufferPolicy = OpenPage;
+		rowBufferPolicy = OpenPageTimeOut;
 		if (DEBUG_INI_READER) 
 		{
-			DEBUG("ROW BUFFER: open page");
+			DEBUG("ROW BUFFER: open page time-out option");
 		}
 	}
+ else if (ROW_BUFFER_POLICY == "open_page_num_accesses")
+	{
+		rowBufferPolicy = OpenPageNumAccessesLimit;
+		if (DEBUG_INI_READER) 
+		{
+			DEBUG("ROW BUFFER: open page num accesses threshold option");
+		}	
+ }
+ else if (ROW_BUFFER_POLICY == "open_page_in_flight")
+	{
+		rowBufferPolicy = OpenPageInFlightRequests;
+		if (DEBUG_INI_READER) 
+		{
+			DEBUG("ROW BUFFER: open page in-flight option");
+		}
+	}
+ else if (ROW_BUFFER_POLICY == "adaptive_open_page") 
+ {
+   rowBufferPolicy = AdaptiveOpenPage;
+   if (DEBUG_INI_READER) {
+    DEBUG("ROW BUFFER: adaptive open-page");
+   }
+ }
 	else if (ROW_BUFFER_POLICY == "close_page")
 	{
 		rowBufferPolicy = ClosePage;
@@ -551,7 +582,7 @@ void IniReader::InitEnumsFromStrings()
 	}
 	else
 	{
-		cout << "WARNING: unknown row buffer policy '"<<ROW_BUFFER_POLICY<<"'; valid values are 'open_page' or 'close_page', Defaulting to Close Page."<<endl;
+		cout << "WARNING: unknown row buffer policy '"<<ROW_BUFFER_POLICY<<"'; valid values are 'open_page_time_out' or 'open_page_num_accesses' or 'open_page_in_flight' or 'adaptive_open_page' or 'close_page', Defaulting to Close Page."<<endl;
 		rowBufferPolicy = ClosePage;
 	}
 
