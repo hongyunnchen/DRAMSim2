@@ -116,7 +116,7 @@ nextRankPRE(0), refreshRank(0), refreshWaiting(false), sendAct(true)
     rankBankLastPrechargeTimeStampMap.insert(rankBankLastPrechargeTimeStampPairType(i, bankLastPrechargeTimeStampMap));
   }
   // initial value of mistake counter
-  mistakeCounter = 2000;
+  mistakeCounter = 25;
 }
 
 CommandQueue::~CommandQueue()
@@ -260,19 +260,32 @@ void CommandQueue::updateBankRWTimeStamp(unsigned rank, unsigned bank,
 }
 
 void CommandQueue::adjustTimeOut() {
-  //cout<<"\n Mistake Counter : " <<mistakeCounter;
+  cout<<"\n Mistake Counter : " <<mistakeCounter;
+  cout<<"\n TIME_LIMIT : " <<TIME_LIMIT;
+  cout<<"\n HIGH_THRESHOLD : " <<HIGH_THRESHOLD;
+  cout<<"\n LOW_THRESHOLD  : " <<LOW_THRESHOLD;
   if (mistakeCounter > HIGH_THRESHOLD) {
     ++TIME_LIMIT;
-    //cout<<"\n New Time out value : " <<TIME_LIMIT; 
+    cout<<"\n New Time out value : " <<TIME_LIMIT; 
   }
   else if (mistakeCounter < LOW_THRESHOLD) {
-    --TIME_LIMIT;
-    //cout<<"\n New Time out value : " <<TIME_LIMIT;
+    if (TIME_LIMIT >0) {
+      --TIME_LIMIT;
+    }
+    cout<<"\n New Time out value : " <<TIME_LIMIT;
   }
 }
 
 bool CommandQueue::pop(BusPacket ** busPacket)
 {
+  
+  // Lets check the mistakeCounter every 30 cycles
+  if (rowBufferPolicy == AdaptiveOpenPage) {
+   if (currentClockCycle % 10 == 0) {
+     adjustTimeOut();
+   }
+  }
+
   //this can be done here because pop() is called every clock cycle by the parent MemoryController
   //      figures out the sliding window requirement for tFAW
   //
@@ -735,9 +748,11 @@ bool CommandQueue::pop(BusPacket ** busPacket)
           }
           else if (rowBufferPolicy == AdaptiveOpenPage) {
  
-            bool found = true;
+            bool found = false;
             if (bankStates[nextRankPRE][nextBankPRE].currentBankState ==
                 RowActive) {
+              cout<<"\n Bank : " <<nextBankPRE<<" has active row";
+              /*
               for (size_t i = 0; i < queue.size(); i++) {
                 // ANI : need to change this
                 //if there is something going to that bank but different row, then we do not want to starve it
@@ -748,19 +763,18 @@ bool CommandQueue::pop(BusPacket ** busPacket)
                   break;
                 }
               }
+              */
 
 
               rankBankTimeStampMapType::iterator rankFound =
                 rankBankTimeStampMap.find(nextRankPRE);
               bankLastRWTimeStampMapType bankLastRWTimeStampMap =
                 rankFound->second;
-              //cout << "\n TIME LIMIT : " << TIME_LIMIT;
-              //cout << "\n bank : " << nextBankPRE << " last access time : " <<
-              //  bankLastRWTimeStampMap[nextBankPRE];
+              cout << "\n TIME LIMIT : " << TIME_LIMIT<<" currentClockCycle : " <<currentClockCycle;
+              cout << "\n bank : " << nextBankPRE << " last access time : " << bankLastRWTimeStampMap[nextBankPRE];
 
 
-              if (!found
-                  || currentClockCycle - bankLastRWTimeStampMap[nextBankPRE] >
+              if (currentClockCycle - bankLastRWTimeStampMap[nextBankPRE] >
                   TIME_LIMIT) {
                 if (currentClockCycle >=
                     bankStates[nextRankPRE][nextBankPRE].nextPrecharge) {
@@ -807,15 +821,7 @@ bool CommandQueue::pop(BusPacket ** busPacket)
   if ((*busPacket)->busPacketType == ACTIVATE) {
     tFAWCountdown[(*busPacket)->rank].push_back(tFAW);
   }
-  
-  // Lets check the mistakeCounter every 100 cycles
-  if (rowBufferPolicy == AdaptiveOpenPage) {
-   if (currentClockCycle % 100 == 0) {
-     adjustTimeOut();
-   }
-  }
-
-  return true;
+    return true;
 }
 
 //check if a rank/bank queue has room for a certain number of bus packets
@@ -901,12 +907,20 @@ bool CommandQueue::isIssuable(BusPacket * busPacket)
           if (bankLastAccessedRowMap[busPacket->bank] == busPacket->row) {
             // The last accessed row of this bank matches the row of this bus packet; increase mistakeCounter
             //cout<<"\n Last accessed row : " <<bankLastAccessedRowMap[busPacket->bank]<<" busPacket row : " <<busPacket->row;
-            mistakeCounter++;
+            if (mistakeCounter <= 50) {
+             mistakeCounter++;
+            }
           }
           if (bankLastPrechargeTimeStampMap[busPacket->bank] > bankStates[busPacket->rank][busPacket->bank].nextPrecharge) {
             if(bankLastPrechargeTimeStampMap[busPacket->bank] - bankStates[busPacket->rank][busPacket->bank].nextPrecharge > tRP) {
               // latest precharge was way far away from calculated precharge time-stamp
-              mistakeCounter--;
+              cout<<"\n Latest precharge was far away from calculated precharge time-stamp";
+              cout<<"\n bankLastPrechargeTimeStampMap["<<busPacket->bank<<"] "<<bankLastPrechargeTimeStampMap[busPacket->bank];
+              cout<<"\n bankStates["<<busPacket->rank<<"]["<<busPacket->bank<<"].nextPrecharge "<<bankStates[busPacket->rank][busPacket->bank].nextPrecharge;
+              if (mistakeCounter >= 0){
+                mistakeCounter--;
+              }
+              cout<<"\n Mistake Counter : " <<mistakeCounter;
             }
           }        
         return true;
@@ -951,15 +965,6 @@ bool CommandQueue::isIssuable(BusPacket * busPacket)
           bankStates[busPacket->rank][busPacket->bank].nextPrecharge) {
           
 
-          // check is necessary as both are unsigned and subtraction will lead to higher value 
-          if (busPacket->timeStamp > bankStates[busPacket->rank][busPacket->bank].nextPrecharge) {            
-
-           if (busPacket->timeStamp - bankStates[busPacket->rank][busPacket->bank].nextPrecharge > tRP) {
-             // Page miss could have been avoided if this was precharged sooner to make it idle by this time
-             //cout<<"\n BusPacket TimeStamp : " <<busPacket->timeStamp<<" nextPrecharge : " <<bankStates[busPacket->rank][busPacket->bank].nextPrecharge;
-             mistakeCounter--; 
-           } 
-          }
         
         return true;
       } else {
