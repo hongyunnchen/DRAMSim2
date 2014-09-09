@@ -5,14 +5,18 @@ JEDEC_DATA_BUS_BITS=64 		 		; Always 64 for DDRx; if you want multiple *ganged* 
 TRANS_QUEUE_DEPTH=32					; transaction queue, i.e., CPU-level commands such as:  READ 0xbeef
 CMD_QUEUE_DEPTH=32						; command queue, i.e., DRAM-level commands such as: CAS 544, RAS 4
 EPOCH_LENGTH=100000						; length of an epoch in cycles (granularity of simulation)
-ROW_BUFFER_POLICY=close_page
+ROW_BUFFER_POLICY=adaptive_open_page
 ADDRESS_MAPPING_SCHEME=scheme1
-SCHEDULING_POLICY=bank_then_rank_round_robin
+SCHEDULING_POLICY=bank_then_rank_round_robin  ; bank_then_rank_round_robin or rank_then_bank_round_robin or FIFO or FRFCFS
 QUEUING_STRUCTURE=per_rank_per_bank		;per_rank or per_rank_per_bank or queue
+RW_TRANS_QUEUE=true			; this separates the read and write transactions placing them into different queues
+HIGH_WATERMARK=25
+LOW_WATERMARK=10
+
 
 ;for true/false, please use all lowercase
-DEBUG_TRANS_Q=false
-DEBUG_CMD_Q=false
+DEBUG_TRANS_Q=true
+DEBUG_CMD_Q=true
 DEBUG_ADDR_MAP=false
 DEBUG_BUS=true
 DEBUG_BANKSTATE=false
@@ -22,4 +26,7 @@ VIS_FILE_OUTPUT=true
 
 USE_LOW_POWER=false 					; go into low power mode when idle?
 VERIFICATION_OUTPUT=true			; should be false for normal operation
+TIME_LIMIT=75
+HIGH_THRESHOLD=30
+LOW_THRESHOLD=20
 TOTAL_ROW_ACCESSES=100	; 				maximum number of open page requests to send to the same row before forcing a row close (to prevent starvation)

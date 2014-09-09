@@ -68,10 +68,14 @@ public:
 	void update();
 	void printStats(bool finalStats = false);
 	void resetStats(); 
-
+ bool dependencyCheck();
 
 	//fields
 	vector<Transaction *> transactionQueue;
+ // read and write transaction queues
+ vector<Transaction *> writeTransactionQueue;
+ vector<Transaction *> readTransactionQueue;
+ 
 private:
 	ostream &dramsim_log;
 	vector< vector <BankState> > bankStates;

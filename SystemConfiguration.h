@@ -130,6 +130,11 @@ extern unsigned TOTAL_ROW_ACCESSES;
 extern unsigned TIME_LIMIT;
 extern unsigned HIGH_THRESHOLD;
 extern unsigned LOW_THRESHOLD;
+extern unsigned HIGH_WATERMARK;
+extern unsigned LOW_WATERMARK;
+
+extern bool RW_TRANS_QUEUE;
+
 extern std::string ROW_BUFFER_POLICY;
 extern std::string SCHEDULING_POLICY;
 extern std::string ADDRESS_MAPPING_SCHEME;

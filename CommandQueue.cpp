@@ -754,7 +754,7 @@ bool CommandQueue::pop(BusPacket ** busPacket)
           }
           else if (rowBufferPolicy == AdaptiveOpenPage) {
  
-            bool found = false;
+            bool found = true;
             if (bankStates[nextRankPRE][nextBankPRE].currentBankState ==
                 RowActive) {
               cout<<"\n Bank : " <<nextBankPRE<<" has active row";
@@ -763,9 +763,9 @@ bool CommandQueue::pop(BusPacket ** busPacket)
                 // ANI : need to change this
                 //if there is something going to that bank but different row, then we do not want to starve it
                 if (queue[i]->bank == nextBankPRE &&
-                    queue[i]->row ==
+                    queue[i]->row !=
                     bankStates[nextRankPRE][nextBankPRE].openRowAddress) {
-                  found = true;
+                  found = false;
                   break;
                 }
               }
@@ -777,8 +777,8 @@ bool CommandQueue::pop(BusPacket ** busPacket)
               cout << "\n TIME LIMIT : " << TIME_LIMIT<<" currentClockCycle : " <<currentClockCycle;
               cout << "\n bank : " << nextBankPRE << " last access time : " << bankLastRWTimeStampMap[nextBankPRE];
 
-              if (currentClockCycle > bankLastRWTimeStampMap[nextBankPRE]) {
-              if ( currentClockCycle - bankLastRWTimeStampMap[nextBankPRE] >
+              if (!found || currentClockCycle > bankLastRWTimeStampMap[nextBankPRE]) {
+              if ( !found || currentClockCycle - bankLastRWTimeStampMap[nextBankPRE] >
                   TIME_LIMIT) {
                 if (currentClockCycle >=
                     bankStates[nextRankPRE][nextBankPRE].nextPrecharge) {
