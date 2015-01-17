@@ -52,11 +52,18 @@
 using namespace DRAMSim;
 using namespace std;
 
+
+
+uint64_t currentSCycleDiff;
+uint64_t prevFinishSCycle = 0;
+
 //#define RETURN_TRANSACTIONS 1
 
 #ifndef _SIM_
 int SHOW_SIM_OUTPUT = 1;
 ofstream visDataOut; //mostly used in MemoryController
+
+
 
 #ifdef RETURN_TRANSACTIONS
 class TransactionReceiver
@@ -153,7 +160,7 @@ void usage()
 }
 #endif
 
-void *parseTraceFileLine(string &line, uint64_t &addr, enum TransactionType &transType, uint64_t &clockCycle, TraceType type, bool useClockCycle)
+void *parseTraceFileLine(string &line, uint64_t &addr, enum TransactionType &transType, uint64_t &clockCycle, TraceType type, bool useClockCycle, bool update)
 {
 	size_t previousIndex=0;
 	size_t spaceIndex=0;
@@ -243,10 +250,59 @@ void *parseTraceFileLine(string &line, uint64_t &addr, enum TransactionType &tra
 		{
 			istringstream b(ccStr);
 			b>>clockCycle;
+			cout<<"\n b : " <<b<<" clockCycle : " <<clockCycle;
 		}
 
 		break;
+	}	
+	
+	case rt:
+	{
+		spaceIndex = line.find_first_of(" ", 0);
+
+		addressStr = line.substr(0, spaceIndex);
+		previousIndex = spaceIndex;
+
+		spaceIndex = line.find_first_not_of(" ", previousIndex);
+		cmdStr = line.substr(spaceIndex, line.find_first_of(" ", spaceIndex) - spaceIndex);
+		previousIndex = line.find_first_of(" ", spaceIndex);
+
+		spaceIndex = line.find_first_not_of(" ", previousIndex);
+		ccStr = line.substr(spaceIndex, line.find_first_of(" ", spaceIndex) - spaceIndex);
+
+		if (cmdStr.compare("IFETCH")==0||
+		        cmdStr.compare("READ")==0)
+		{
+			transType = DATA_READ;
+		}
+		else if (cmdStr.compare("WRITE")==0)
+		{
+			transType = DATA_WRITE;
+		}
+		else
+		{
+			ERROR("== Unknown command in tracefile : "<<cmdStr);
+		}
+
+		istringstream a(addressStr.substr(2));//gets rid of 0x
+		a>>hex>>addr;
+
+		//if this is set to false, clockCycle will remain at 0, and every line read from the trace
+		//  will be allowed to be issued
+		if (useClockCycle)
+		{
+			istringstream b(ccStr);
+			if (update){
+				b>>currentSCycleDiff; // set currentSCycleDiff to this clockCycle variable read from the file
+				clockCycle = prevFinishSCycle; // set clockCycle of this request to the finish time of the previous request
+				cout<<"\n currentSCycleDiff : " <<currentSCycleDiff;
+				cout<<"\n clockCycle : " <<clockCycle;
+				cout<<"\n prevFinishSCycle : " <<prevFinishSCycle;
+			}
+		}
+		break;
 	}
+	
 	case misc:
 		spaceIndex = line.find_first_of(" ", spaceIndex+1);
 		if (spaceIndex == string::npos)
@@ -479,6 +535,12 @@ int main(int argc, char **argv)
 	{
 		traceType = misc;
 	}
+	
+	else if (temp =="rt")
+	{
+		traceType = rt;
+	}
+	
 	else
 	{
 		ERROR("== Unknown Tracefile Type : "<<temp);
@@ -540,69 +602,171 @@ int main(int argc, char **argv)
 		cout << "== Error - Could not open trace file"<<endl;
 		exit(0);
 	}
-
-	for (size_t i=0;i<numCycles;i++)
-	{
-		if (!pendingTrans)
+	if (temp != "rt") {
+		for (size_t i=0;i<numCycles;i++)
 		{
-			if (!traceFile.eof())
+			if (!pendingTrans)
 			{
-				getline(traceFile, line);
-
-				if (line.size() > 0)
+				if (!traceFile.eof())
 				{
-					data = parseTraceFileLine(line, addr, transType,clockCycle, traceType,useClockCycle);
-					trans = new Transaction(transType, addr, data);
-					alignTransactionAddress(*trans); 
+					getline(traceFile, line);
 
-					if (i>=clockCycle)
+					if (line.size() > 0)
 					{
-						if (!(*memorySystem).addTransaction(trans))
+						data = parseTraceFileLine(line, addr, transType,clockCycle, traceType,useClockCycle, true);
+						// Here you would change the clockCycle for Michael's case
+						// Add a compiler flag here to switch between normal operation
+
+						trans = new Transaction(transType, addr, data);
+						alignTransactionAddress(*trans); 
+
+						if (i>=clockCycle)
 						{
-							pendingTrans = true;
+							if (!(*memorySystem).addTransaction(trans))
+							{
+								pendingTrans = true;
+							}
+							else
+							{
+	#ifdef RETURN_TRANSACTIONS
+								transactionReceiver.add_pending(trans, i); 
+	#endif
+								// the memory system accepted our request so now it takes ownership of it
+								trans = NULL; 
+							}
 						}
 						else
 						{
-#ifdef RETURN_TRANSACTIONS
-							transactionReceiver.add_pending(trans, i); 
-#endif
-							// the memory system accepted our request so now it takes ownership of it
-							trans = NULL; 
+							pendingTrans = true;
 						}
 					}
 					else
 					{
-						pendingTrans = true;
+						DEBUG("WARNING: Skipping line "<<lineNumber<< " ('" << line << "') in tracefile");
 					}
+					lineNumber++;
 				}
 				else
 				{
-					DEBUG("WARNING: Skipping line "<<lineNumber<< " ('" << line << "') in tracefile");
+					//we're out of trace, set pending=false and let the thing spin without adding transactions
+					pendingTrans = false; 
 				}
-				lineNumber++;
 			}
-			else
-			{
-				//we're out of trace, set pending=false and let the thing spin without adding transactions
-				pendingTrans = false; 
-			}
-		}
 
-		else if (pendingTrans && i >= clockCycle)
+			else if (pendingTrans && i >= clockCycle)
+			{
+				pendingTrans = !(*memorySystem).addTransaction(trans);
+				if (!pendingTrans)
+				{
+	#ifdef RETURN_TRANSACTIONS
+					transactionReceiver.add_pending(trans, i); 
+	#endif
+					trans=NULL;
+				}
+			}
+	
+			(*memorySystem).update();
+		}
+	}
+	else {
+			cout<<"\n RT style format";
+			size_t i = 0;
+			bool getNextLine = true;
+			while (i < numCycles) {
+				if (!traceFile.eof()) {
+					if (getNextLine) {
+						getline(traceFile, line);
+						getNextLine = false;
+					}
+					if (line.size() > 0) {
+
+						data = parseTraceFileLine(line, addr, transType, clockCycle, traceType, useClockCycle, true);
+						if (i == clockCycle) {
+							// Because the core interface is a in-order core, successive requests will arrive only after the previous request has completed
+							// Therefore, each request has a distinct time-stamp and there will be no overhead latency of waiting
+
+
+							trans = new Transaction(transType, addr, data);
+							alignTransactionAddress(*trans);
+							(*memorySystem).addTransaction(trans);							
+							getline(traceFile, line);
+							data = parseTraceFileLine(line, addr, transType, clockCycle, traceType, useClockCycle, false);
+						}
+
+						i++;
+					}
+				}
+				(*memorySystem).update();
+			}
+	}
+		/*
+			for (size_t i=0;i<numCycles;i++)
 		{
-			pendingTrans = !(*memorySystem).addTransaction(trans);
 			if (!pendingTrans)
 			{
-#ifdef RETURN_TRANSACTIONS
-				transactionReceiver.add_pending(trans, i); 
-#endif
-				trans=NULL;
+				if (!traceFile.eof())
+				{
+					getline(traceFile, line);
+
+					if (line.size() > 0)
+					{
+						data = parseTraceFileLine(line, addr, transType,clockCycle, traceType,useClockCycle);
+						// Here you would change the clockCycle for Michael's case
+						// Add a compiler flag here to switch between normal operation
+
+						trans = new Transaction(transType, addr, data);
+						alignTransactionAddress(*trans); 
+
+						if (i>=clockCycle)
+						{
+							if (!(*memorySystem).addTransaction(trans))
+							{
+								pendingTrans = true;
+							}
+							else
+							{
+	#ifdef RETURN_TRANSACTIONS
+								transactionReceiver.add_pending(trans, i); 
+	#endif
+								// the memory system accepted our request so now it takes ownership of it
+								trans = NULL; 
+							}
+						}
+						else
+						{
+							pendingTrans = true;
+						}
+					}
+					else
+					{
+						DEBUG("WARNING: Skipping line "<<lineNumber<< " ('" << line << "') in tracefile");
+					}
+					lineNumber++;
+				}
+				else
+				{
+					//we're out of trace, set pending=false and let the thing spin without adding transactions
+					pendingTrans = false; 
+				}
 			}
+
+			else if (pendingTrans && i >= clockCycle)
+			{
+				pendingTrans = !(*memorySystem).addTransaction(trans);
+				if (!pendingTrans)
+				{
+	#ifdef RETURN_TRANSACTIONS
+					transactionReceiver.add_pending(trans, i); 
+	#endif
+					trans=NULL;
+				}
+			}
+	
+			(*memorySystem).update();
 		}
+			
 
-		(*memorySystem).update();
-	}
-
+*/
 	traceFile.close();
 	memorySystem->printStats(true);
 	// make valgrind happy

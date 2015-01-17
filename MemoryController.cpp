@@ -297,7 +297,8 @@ void MemoryController::update()
 
   //function returns true if there is something valid in poppedBusPacket
   if (commandQueue.pop(&poppedBusPacket)) {
-    if (poppedBusPacket->busPacketType == WRITE
+
+		if (poppedBusPacket->busPacketType == WRITE
         || poppedBusPacket->busPacketType == WRITE_P) {
 
       writeDataToSend.push_back(new
@@ -320,6 +321,11 @@ void MemoryController::update()
     switch (poppedBusPacket->busPacketType) {
       case READ_P:
       case READ:
+
+ 				cout<<"\n READ PACKET";
+				cout<<"\n Finish clock cycle1 : " <<currentClockCycle + CL - 1 ; // the 1 if tCMD
+				prevFinishSCycle += currentClockCycle - prevFinishSCycle + currentSCycleDiff + CL - 1;
+				cout<<"\n prevFinishSCycle : " <<prevFinishSCycle;
         //add energy to account for total
         if (DEBUG_POWER) {
           PRINT(" ++ Adding Read energy to total energy");
@@ -377,6 +383,10 @@ void MemoryController::update()
       case WRITE_P:
       case WRITE:
 
+ 				cout<<"\n WRITE PACKET";
+				cout<<"\n Finish clock cycle1 : " <<currentClockCycle + CL -1;
+				prevFinishSCycle += currentClockCycle - prevFinishSCycle + currentSCycleDiff + CL - 1;
+				cout<<"\n prevFinishSCycle : " <<prevFinishSCycle;
         if (poppedBusPacket->busPacketType == WRITE_P) {
           bankStates[rank][bank].nextActivate =
             max(currentClockCycle + WRITE_AUTOPRE_DELAY,
@@ -605,7 +615,7 @@ void MemoryController::update()
    }
    else {
      // pick the read queue
-     cout<<" \ n Picking the read queue ";
+     cout<<"\n Picking the read queue ";
      for (size_t i = 0; i < readTransactionQueue.size(); i++) {
         //pop off top transaction from queue
         //

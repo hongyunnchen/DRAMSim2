@@ -37,7 +37,7 @@ namespace DRAMSim
 {
 void addressMapping(uint64_t physicalAddress, unsigned &newTransactionChan, unsigned &newTransactionRank, unsigned &newTransactionBank, unsigned &newTransactionRow, unsigned &newTransactionColumn)
 {
-	uint64_t physicalAddressCopy = physicalAddress;
+
 	uint64_t tempA, tempB, tempC, tempD;
 	unsigned transactionSize = (JEDEC_DATA_BUS_BITS/8)*BL; 
 	uint64_t transactionMask =  transactionSize - 1; //ex: (64 bit bus width) x (8 Burst Length) - 1 = 64 bytes - 1 = 63 = 0x3f mask

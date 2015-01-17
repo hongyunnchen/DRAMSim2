@@ -261,10 +261,10 @@ void CommandQueue::updateBankRWTimeStamp(unsigned rank, unsigned bank,
 }
 
 void CommandQueue::adjustTimeOut() {
-  cout<<"\n Mistake Counter : " <<mistakeCounter;
-  cout<<"\n TIME_LIMIT : " <<TIME_LIMIT;
-  cout<<"\n HIGH_THRESHOLD : " <<HIGH_THRESHOLD;
-  cout<<"\n LOW_THRESHOLD  : " <<LOW_THRESHOLD;
+  //cout<<"\n Mistake Counter : " <<mistakeCounter;
+  //cout<<"\n TIME_LIMIT : " <<TIME_LIMIT;
+  //cout<<"\n HIGH_THRESHOLD : " <<HIGH_THRESHOLD;
+  //cout<<"\n LOW_THRESHOLD  : " <<LOW_THRESHOLD;
   if (mistakeCounter >= HIGH_THRESHOLD) {
 		HIGH_THRESHOLD = mistakeCounter;
 		if (HIGH_THRESHOLD - LOW_THRESHOLD > 10) {
@@ -283,7 +283,7 @@ void CommandQueue::adjustTimeOut() {
     if (TIME_LIMIT > 0) {
       --TIME_LIMIT;
     }
-    cout<<"\n New Time out value : " <<TIME_LIMIT;
+    //cout<<"\n New Time out value : " <<TIME_LIMIT;
   }
 }
 
@@ -451,7 +451,7 @@ bool CommandQueue::pop(BusPacket ** busPacket)
              || rowBufferPolicy == OpenPageNumAccessesLimit
              || rowBufferPolicy == OpenPageInFlightRequests 
              || rowBufferPolicy == AdaptiveOpenPage) {
-    cout<<"\n ROW ACCESS COUNTER : " <<TOTAL_ROW_ACCESSES;
+    //cout<<"\n ROW ACCESS COUNTER : " <<TOTAL_ROW_ACCESSES;
 		bool sendingREForPRE = false;
     if (refreshWaiting) {
       bool sendREF = true;
@@ -541,8 +541,7 @@ bool CommandQueue::pop(BusPacket ** busPacket)
         //cout<<"\n getting rank : " <<nextRank<<" bank : " <<nextBank<<" queue size : " <<queue.size();
         //make sure there is something there first
         if (!queue.empty() && !((nextRank == refreshRank) && refreshWaiting)) {
-          //search from the beginning to find first issuable bus packet
-         // if (schedulingPolicy == Frfcfs) {
+          //search from the beginning to find first issuable bus packet								
            if (schedulingPolicy == BankThenRankRoundRobin || schedulingPolicy == Fifo) {
 						// only look at the head of the queue to issue the request	 
 					 		// if activate is not issuable because the row is open, then else clause with check for next request
@@ -600,17 +599,26 @@ bool CommandQueue::pop(BusPacket ** busPacket)
                 //      that activate as well (check i>0 because if i==0 then theres nothing before it)
                 if (i > 0 && queue[i - 1]->busPacketType == ACTIVATE) {
                   //rowAccessCounters[(*busPacket)->rank][(*busPacket)->bank]++;
-                 
-
 									// i is being returned, but i-1 is being thrown away, so must delete it here 
                   delete(queue[i - 1]);
 
                   // remove both i-1 (the activate) and i (we've saved the pointer in *busPacket)
                   queue.erase(queue.begin() + i - 1, queue.begin() + i + 1);
-                } else          // there's no activate before this packet
+									/*
+									cout<<"\n Finish clock cycle1 : " <<currentClockCycle;
+									prevFinishSCycle += currentClockCycle - prevFinishSCycle + currentSCycleDiff;
+									cout<<"\n prevFinishSCycle : " <<prevFinishSCycle;
+									*/
+                } 
+								else          // there's no activate before this packet
                 {
                   //or just remove the one bus packet
                   queue.erase(queue.begin() + i);
+									/*
+									cout<<"\n Finish clock cycle2 : " <<currentClockCycle;
+									prevFinishSCycle += currentClockCycle - prevFinishSCycle + currentSCycleDiff;
+									cout<<"\n prevFinishSCycle : " <<prevFinishSCycle;
+									*/
                 }
 
                 foundIssuable = true;
@@ -704,14 +712,15 @@ bool CommandQueue::pop(BusPacket ** busPacket)
 							// 1. No requests and time_limit has met, issue precharge
 							// 2. Queue is not empty and no open row requests found, issue precharge
               if ((!found && queue.size() != 0) || (queue.size() == 0 && currentClockCycle > bankLastRWTimeStampMap[nextBankPRE] && currentClockCycle - bankLastRWTimeStampMap[nextBankPRE] > TIME_LIMIT )){
-                
+               	
+								/*
 								cout <<"\n Issuing precharge because \n";
 								cout<<"\n Found : " <<found;
 								cout<<"\n queue size : " <<queue.size();
 								cout<<"\n currentClockCycle : " <<currentClockCycle;
 								cout<<"\n bankLastRWTimeStampMap["<<nextBankPRE<<"] : " <<bankLastRWTimeStampMap[nextBankPRE];
 								cout<<"\n TIME LIMIT : " <<TIME_LIMIT;
-								
+								*/
 								if (currentClockCycle >=
                     bankStates[nextRankPRE][nextBankPRE].nextPrecharge) {
                   sendingPRE = true;
@@ -752,10 +761,11 @@ bool CommandQueue::pop(BusPacket ** busPacket)
                 if (currentClockCycle >=
                     bankStates[nextRankPRE][nextBankPRE].nextPrecharge) {
                   sendingPRE = true;
-                  cout<<"\n Found value : " <<found;
+                  /*
+									cout<<"\n Found value : " <<found;
 									cout<<"\n rwAccessCounters : " <<rowAccessCounters[nextRankPRE][nextBankPRE];
 									cout<<"\n Set row access counters for bank : " <<nextBankPRE<<" rank : " <<nextRankPRE<<" to zero";
-									
+									*/
                   rowAccessCounters[nextRankPRE][nextBankPRE] = 0;
 									*busPacket =
                     new BusPacket(PRECHARGE, 0, 0, 0, nextRankPRE, nextBankPRE,
@@ -902,13 +912,14 @@ bool CommandQueue::isIssuable(BusPacket * busPacket)
 
           bankLastAccessedRowMapType bankLastAccessedRowMap = rankBankLastAccessedRowMap[busPacket->rank];
           bankLastPrechargeTimeStampMapType bankLastPrechargeTimeStampMap = rankBankLastPrechargeTimeStampMap[busPacket->rank];
-					
+					/*	
 					cout<<"\n Investigate Bank : " <<busPacket->bank<<" Rank : " <<busPacket->rank<<" Row : " <<busPacket->row;
           cout<<"\n Last accessed row : " <<bankLastAccessedRowMap[busPacket->bank]<<" packet row : " <<busPacket->row; 
           cout<<"\n Last precharge : " <<bankLastPrechargeTimeStampMap[busPacket->bank]<<" nextPrecharge : " <<bankStates[busPacket->rank][busPacket->bank].nextPrecharge;
+					*/
 					if (bankLastAccessedRowMap[busPacket->bank] == busPacket->row) {
             // The last accessed row of this bank matches the row of this bus packet; increase mistakeCounter
-            cout<<"\n Last accessed row : " <<bankLastAccessedRowMap[busPacket->bank]<<" busPacket row : " <<busPacket->row;
+            //cout<<"\n Last accessed row : " <<bankLastAccessedRowMap[busPacket->bank]<<" busPacket row : " <<busPacket->row;
             if (mistakeCounter <= 50) {
              mistakeCounter++;             
             }
@@ -916,17 +927,18 @@ bool CommandQueue::isIssuable(BusPacket * busPacket)
           }
           else if (bankLastPrechargeTimeStampMap[busPacket->bank] > bankStates[busPacket->rank][busPacket->bank].nextPrecharge) {
             if(bankLastPrechargeTimeStampMap[busPacket->bank] - bankStates[busPacket->rank][busPacket->bank].nextPrecharge > tRP) {
-              
+             	/* 
 							cout<<"\n Latest precharge was far away from calculated precharge time-stamp";
               cout<<"\n bankLastPrechargeTimeStampMap["<<busPacket->bank<<"] "<<bankLastPrechargeTimeStampMap[busPacket->bank];
               cout<<"\n bankStates["<<busPacket->rank<<"]["<<busPacket->bank<<"].nextPrecharge "<<bankStates[busPacket->rank][busPacket->bank].nextPrecharge;
+							*/
               if (mistakeCounter > 0){
                 mistakeCounter--;
               }
              // cout<<"\n Mistake Counter : " <<mistakeCounter;
             }
           }        
-        	cout<<"\n new mistake counter : " <<mistakeCounter;
+        	//cout<<"\n new mistake counter : " <<mistakeCounter;
 					return true;
       } else {
         return false;
@@ -944,7 +956,7 @@ bool CommandQueue::isIssuable(BusPacket * busPacket)
 					if (rowBufferPolicy == OpenPageNumAccessesLimit) {
 						if (rowAccessCounters[busPacket->rank][busPacket->bank] < TOTAL_ROW_ACCESSES) {
 							
-							cout<<"\n increment row access counters : " <<rowAccessCounters[(busPacket)->rank][(busPacket)->bank]++;
+							//cout<<"\n increment row access counters : " <<rowAccessCounters[(busPacket)->rank][(busPacket)->bank]++;
 							updateBankLastAccessedRow(busPacket->rank, busPacket->bank, busPacket->row);
 							updateBankRWTimeStamp(busPacket->rank, busPacket->bank, currentClockCycle);
 
@@ -973,7 +985,7 @@ bool CommandQueue::isIssuable(BusPacket * busPacket)
         	if (rowBufferPolicy == OpenPageNumAccessesLimit) {
 						if (rowAccessCounters[busPacket->rank][busPacket->bank] < TOTAL_ROW_ACCESSES) {
 							
-							cout<<"\n increment row access counters : " <<rowAccessCounters[(busPacket)->rank][(busPacket)->bank]++;
+							//cout<<"\n increment row access counters : " <<rowAccessCounters[(busPacket)->rank][(busPacket)->bank]++;
 							updateBankLastAccessedRow(busPacket->rank, busPacket->bank, busPacket->row);
 							updateBankRWTimeStamp(busPacket->rank, busPacket->bank, currentClockCycle);
 							return true;

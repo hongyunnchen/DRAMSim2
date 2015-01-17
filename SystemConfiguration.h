@@ -140,11 +140,17 @@ extern std::string SCHEDULING_POLICY;
 extern std::string ADDRESS_MAPPING_SCHEME;
 extern std::string QUEUING_STRUCTURE;
 
+// Real-time trace specific parameters
+
+extern uint64_t currentSCycleDiff;
+extern uint64_t prevFinishSCycle;
+
 enum TraceType
 {
 	k6,
 	mase,
-	misc
+	misc,
+	rt
 };
 
 enum AddressMappingScheme
