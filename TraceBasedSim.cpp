@@ -683,22 +683,23 @@ int main(int argc, char **argv)
 						if (i == prevFinishSCycle) {
 							// Because the core interface is a in-order core, successive requests will arrive only after the previous request has completed
 							// Therefore, each request has a distinct time-stamp and there will be no overhead latency of waiting
-							//if (!traceFile.eof()) {
-								data = parseTraceFileLine(line, addr, transType, clockCycle, traceType, useClockCycle, true);
+										
+							data = parseTraceFileLine(line, addr, transType, clockCycle, traceType, useClockCycle, true);
 						
-								trans = new Transaction(transType, addr, data);
-								alignTransactionAddress(*trans);
-								(*memorySystem).addTransaction(trans);							
+							trans = new Transaction(transType, addr, data);
+							alignTransactionAddress(*trans);
+							(*memorySystem).addTransaction(trans);							
 
-								getline(traceFile, line);
+							getline(traceFile, line);
 
-								if (!traceFile.eof()) {	
-									data = parseTraceFileLine(line, addr, transType, clockCycle, traceType, useClockCycle, false);
-								}
-								else {
-									trans = NULL;
-								}
-							//}	
+							if (!traceFile.eof()) {	
+								data = parseTraceFileLine(line, addr, transType, clockCycle, traceType, useClockCycle, false);
+							}
+							else {
+								// Need to set trans to NULL to avoid freeing the same 
+								// memory twice. 
+								trans = NULL;
+							}
 						}
 						else {
 							trans = NULL;
@@ -709,75 +710,7 @@ int main(int argc, char **argv)
 				(*memorySystem).update();
 			}
 	}
-	
-		/*
-			for (size_t i=0;i<numCycles;i++)
-		{
-			if (!pendingTrans)
-			{
-				if (!traceFile.eof())
-				{
-					getline(traceFile, line);
 
-					if (line.size() > 0)
-					{
-						data = parseTraceFileLine(line, addr, transType,clockCycle, traceType,useClockCycle);
-						// Here you would change the clockCycle for Michael's case
-						// Add a compiler flag here to switch between normal operation
-
-						trans = new Transaction(transType, addr, data);
-						alignTransactionAddress(*trans); 
-
-						if (i>=clockCycle)
-						{
-							if (!(*memorySystem).addTransaction(trans))
-							{
-								pendingTrans = true;
-							}
-							else
-							{
-	#ifdef RETURN_TRANSACTIONS
-								transactionReceiver.add_pending(trans, i); 
-	#endif
-								// the memory system accepted our request so now it takes ownership of it
-								trans = NULL; 
-							}
-						}
-						else
-						{
-							pendingTrans = true;
-						}
-					}
-					else
-					{
-						DEBUG("WARNING: Skipping line "<<lineNumber<< " ('" << line << "') in tracefile");
-					}
-					lineNumber++;
-				}
-				else
-				{
-					//we're out of trace, set pending=false and let the thing spin without adding transactions
-					pendingTrans = false; 
-				}
-			}
-
-			else if (pendingTrans && i >= clockCycle)
-			{
-				pendingTrans = !(*memorySystem).addTransaction(trans);
-				if (!pendingTrans)
-				{
-	#ifdef RETURN_TRANSACTIONS
-					transactionReceiver.add_pending(trans, i); 
-	#endif
-					trans=NULL;
-				}
-			}
-	
-			(*memorySystem).update();
-		}
-			
-
-*/
 	traceFile.close();
 	memorySystem->printStats(true);
 	// make valgrind happy
