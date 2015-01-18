@@ -295,11 +295,9 @@ void *parseTraceFileLine(string &line, uint64_t &addr, enum TransactionType &tra
 			if (update){
 				b>>currentSCycleDiff; // set currentSCycleDiff to this clockCycle variable read from the file
 				clockCycle = prevFinishSCycle; // set clockCycle of this request to the finish time of the previous request
-				/*
 				cout<<"\n currentSCycleDiff : " <<currentSCycleDiff;
 				cout<<"\n clockCycle : " <<clockCycle;
 				cout<<"\n prevFinishSCycle : " <<prevFinishSCycle;
-				*/
 			}
 		}
 		break;
@@ -670,6 +668,7 @@ int main(int argc, char **argv)
 			(*memorySystem).update();
 		}
 	}
+	
 	else {
 			cout<<"\n RT style format";
 			size_t i = 0;
@@ -681,27 +680,36 @@ int main(int argc, char **argv)
 						getNextLine = false;
 					}
 					if (line.size() > 0) {
-
-						data = parseTraceFileLine(line, addr, transType, clockCycle, traceType, useClockCycle, true);
 						if (i == prevFinishSCycle) {
 							// Because the core interface is a in-order core, successive requests will arrive only after the previous request has completed
 							// Therefore, each request has a distinct time-stamp and there will be no overhead latency of waiting
-							trans = new Transaction(transType, addr, data);
-							alignTransactionAddress(*trans);
-							(*memorySystem).addTransaction(trans);							
-							getline(traceFile, line);
-							data = parseTraceFileLine(line, addr, transType, clockCycle, traceType, useClockCycle, false);
+							//if (!traceFile.eof()) {
+								data = parseTraceFileLine(line, addr, transType, clockCycle, traceType, useClockCycle, true);
+						
+								trans = new Transaction(transType, addr, data);
+								alignTransactionAddress(*trans);
+								(*memorySystem).addTransaction(trans);							
+
+								getline(traceFile, line);
+
+								if (!traceFile.eof()) {	
+									data = parseTraceFileLine(line, addr, transType, clockCycle, traceType, useClockCycle, false);
+								}
+								else {
+									trans = NULL;
+								}
+							//}	
 						}
 						else {
 							trans = NULL;
 						}
-
-						i++;
 					}
 				}
+				i++;
 				(*memorySystem).update();
 			}
 	}
+	
 		/*
 			for (size_t i=0;i<numCycles;i++)
 		{

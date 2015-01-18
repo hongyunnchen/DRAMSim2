@@ -322,10 +322,10 @@ void MemoryController::update()
       case READ_P:
       case READ:
 
- 				//cout<<"\n READ PACKET";
-				//cout<<"\n Finish clock cycle1 : " <<currentClockCycle + CL - 1 ; // the 1 if tCMD
+ 				cout<<"\n READ PACKET";
+				cout<<"\n Finish clock cycle1 : " <<currentClockCycle + CL - 1 ; // the 1 if tCMD
 				prevFinishSCycle += currentClockCycle - prevFinishSCycle + currentSCycleDiff + CL - 1;
-				//cout<<"\n prevFinishSCycle : " <<prevFinishSCycle;
+				cout<<"\n prevFinishSCycle : " <<prevFinishSCycle;
         //add energy to account for total
         if (DEBUG_POWER) {
           PRINT(" ++ Adding Read energy to total energy");
@@ -383,10 +383,10 @@ void MemoryController::update()
       case WRITE_P:
       case WRITE:
 
- 				//cout<<"\n WRITE PACKET";
-				//cout<<"\n Finish clock cycle1 : " <<currentClockCycle + CL -1;
+ 				cout<<"\n WRITE PACKET";
+				cout<<"\n Finish clock cycle1 : " <<currentClockCycle + CL -1;
 				prevFinishSCycle += currentClockCycle - prevFinishSCycle + currentSCycleDiff + CL - 1;
-				//cout<<"\n prevFinishSCycle : " <<prevFinishSCycle;
+				cout<<"\n prevFinishSCycle : " <<prevFinishSCycle;
         if (poppedBusPacket->busPacketType == WRITE_P) {
           bankStates[rank][bank].nextActivate =
             max(currentClockCycle + WRITE_AUTOPRE_DELAY,
